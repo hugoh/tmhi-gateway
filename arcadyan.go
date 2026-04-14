@@ -124,7 +124,9 @@ func (a *ArcadyanGateway) Request(method, path string) (*InfoResult, error) {
 
 	var data map[string]any
 	if strings.HasPrefix(contentType, "application/json") {
-		_ = json.Unmarshal(resp.Body(), &data)
+		if err := json.Unmarshal(resp.Body(), &data); err != nil {
+			return nil, fmt.Errorf("json unmarshal failed: %w", err)
+		}
 	}
 
 	return &InfoResult{

@@ -1,0 +1,23 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - depguard
+    - exhaustruct
+    - noinlineerr
+    - paralleltest
+    - testpackage
+    - wsl
+  exclusions:
+    rules:
+      - path: _test\.go$
+        linters:
+          - err113
+          - funlen
+          - varnamelen
+formatters:
+  enable:
+    - gci
+    - gofumpt
+    - goimports
+    - golines

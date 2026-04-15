@@ -1,7 +1,7 @@
 # tmhi-gateway
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/hugoh/tmhi-gateway.svg)](https://pkg.go.dev/github.com/hugoh/tmhi-gateway)
-[![codecov](https://codecov.io/github/hugoh/tmhi-cli/graph/badge.svg?token=9VA6Q2K9T1)](https://codecov.io/github/hugoh/tmhi-cli)
+[![codecov](https://codecov.io/gh/hugoh/tmhi-gateway/graph/badge.svg?token=MCZUXN8MHO)](https://codecov.io/gh/hugoh/tmhi-gateway)
 [![CI](https://github.com/hugoh/tmhi-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/hugoh/tmhi-gateway/actions/workflows/ci.yml)
 
 Go library for interacting with T-Mobile Home Internet gateways (Nokia and Arcadyan models).

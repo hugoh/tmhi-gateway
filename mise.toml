@@ -2,7 +2,8 @@
 go = "1.26.2"
 "go:github.com/vladopajic/go-test-coverage/v2" = "2.18.4"
 golangci-lint = "2.11.4"
-prettier = "3.8.1"
+gotestsum = "1.13.0"
+prettier = "3.8.3"
 
 [env]
 COVEROUT = "cover.out"
@@ -13,11 +14,11 @@ run = ["go mod tidy -diff", "golangci-lint run ./...", "prettier --check ."]
 
 [tasks.test]
 description = "Run tests"
-run = "go test ./... -race -coverprofile=${COVEROUT} -covermode=atomic"
+run = "gotestsum -- ./... -race"
 
 [tasks.coverage]
 description = "Generate test coverage"
-depends = ["test"]
+run = "go test ./... -coverprofile=${COVEROUT} -covermode=atomic"
 
 [tasks.covercheck]
 description = "Check test coverage"
@@ -26,7 +27,7 @@ run = "go-test-coverage -config .testcoverage.yml"
 
 [tasks.ci]
 description = "Run CI checks (lint, test, coverage)"
-depends = ["lint", "covercheck"]
+depends = ["lint", "test", "covercheck"]
 
 [tasks.clean]
 description = "Clean the project"

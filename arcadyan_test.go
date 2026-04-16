@@ -37,11 +37,13 @@ func newArcadyan(
 	token string,
 	exp time.Time,
 ) *ArcadyanGateway {
+	gc := &GatewayCommon{
+		client: client,
+		config: cfg,
+	}
+
 	ag := &ArcadyanGateway{
-		GatewayCommon: &GatewayCommon{
-			client: client,
-			config: cfg,
-		},
+		GatewayCommon: gc,
 	}
 	if token != "" {
 		ag.credentials = arcadianLoginData{

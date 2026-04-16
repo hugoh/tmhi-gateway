@@ -1,6 +1,8 @@
 package tmhi
 
-import "github.com/go-resty/resty/v2"
+import (
+	"github.com/go-resty/resty/v2"
+)
 
 // Gateway defines the interface for T-Mobile gateway implementations.
 type Gateway interface {
@@ -14,9 +16,8 @@ type Gateway interface {
 
 // GatewayCommon provides shared functionality for gateway implementations.
 type GatewayCommon struct {
-	client        *resty.Client
-	config        *GatewayConfig
-	authenticated bool
+	client *resty.Client
+	config *GatewayConfig
 }
 
 // NewGatewayCommon creates a new GatewayCommon with the given configuration.
@@ -45,6 +46,10 @@ func (gc *GatewayCommon) CheckWebInterface() *StatusResult {
 		result.WebInterfaceUp = false
 
 		return result
+	}
+
+	if resp.RawResponse != nil && resp.RawResponse.Body != nil {
+		_ = resp.RawResponse.Body.Close()
 	}
 
 	result.StatusCode = resp.StatusCode()

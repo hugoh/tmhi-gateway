@@ -78,8 +78,7 @@ func TestNokiaGateway_Reboot_Success(t *testing.T) {
 	client := NewTestClient(&http.Response{StatusCode: http.StatusOK}, nil)
 	gw := &NokiaGateway{
 		GatewayCommon: &GatewayCommon{
-			client:        client,
-			authenticated: true,
+			client: client,
 			config: &GatewayConfig{
 				Username: testUsername,
 				Password: testPassword,
@@ -163,7 +162,8 @@ func TestNokiaGateway_getCredentials_Success(t *testing.T) {
 
 func TestNokiaGateway_Login_Alreadyauthenticated(t *testing.T) {
 	gw := &NokiaGateway{
-		GatewayCommon: &GatewayCommon{authenticated: true, config: &GatewayConfig{}},
+		GatewayCommon: &GatewayCommon{config: &GatewayConfig{}},
+		credentials:   nokiaLoginData{SID: "valid-sid", CSRFToken: "valid-token"},
 	}
 
 	result, err := gw.Login()
@@ -204,9 +204,8 @@ func TestNokiaGateway_Reboot_DryRun(t *testing.T) {
 	client := NewTestClient(nil, errors.New("should not be called"))
 	gw := &NokiaGateway{
 		GatewayCommon: &GatewayCommon{
-			client:        client,
-			authenticated: true,
-			config:        &GatewayConfig{DryRun: true},
+			client: client,
+			config: &GatewayConfig{DryRun: true},
 		},
 		credentials: nokiaLoginData{
 			SID:       "valid-sid",
@@ -225,9 +224,8 @@ func TestNokiaGateway_Reboot_ErrorResponse(t *testing.T) {
 	}, nil)
 	gw := &NokiaGateway{
 		GatewayCommon: &GatewayCommon{
-			client:        client,
-			authenticated: true,
-			config:        &GatewayConfig{},
+			client: client,
+			config: &GatewayConfig{},
 		},
 		credentials: nokiaLoginData{
 			SID:       "valid-sid",
@@ -295,7 +293,6 @@ func TestNokiaGateway_Login_Success(t *testing.T) {
 
 	result, err := gw.Login()
 	require.NoError(t, err)
-	assert.True(t, gw.authenticated)
 	assert.Equal(t, "testSid", gw.credentials.SID)
 	assert.Equal(t, "testToken", gw.credentials.CSRFToken)
 	assert.True(t, result.Success)
@@ -307,9 +304,8 @@ func TestNokiaGateway_Reboot_RequestError(t *testing.T) {
 	client := NewTestClient(nil, errors.New("network error"))
 	gw := &NokiaGateway{
 		GatewayCommon: &GatewayCommon{
-			client:        client,
-			authenticated: true,
-			config:        &GatewayConfig{},
+			client: client,
+			config: &GatewayConfig{},
 		},
 		credentials: nokiaLoginData{
 			SID:       "valid-sid",

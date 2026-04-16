@@ -24,11 +24,11 @@ type arcadianLoginData struct {
 }
 
 // NewArcadyanGateway creates a new Arcadyan gateway instance.
-func NewArcadyanGateway() *ArcadyanGateway {
-	ret := &ArcadyanGateway{GatewayCommon: NewGatewayCommon()}
-	ret.Client.SetHeader("Accept", "application/json")
+func NewArcadyanGateway(cfg *GatewayConfig) *ArcadyanGateway {
+	gc := NewGatewayCommon(cfg)
+	gc.client.SetHeader("Accept", "application/json")
 
-	return ret
+	return &ArcadyanGateway{GatewayCommon: gc}
 }
 
 // Login authenticates with the Arcadyan gateway.
@@ -38,8 +38,8 @@ func (a *ArcadyanGateway) Login() (*LoginResult, error) {
 	}
 
 	bodyMap := map[string]string{
-		"username": a.Username,
-		"password": a.Password,
+		"username": a.config.Username,
+		"password": a.config.Password,
 	}
 
 	reqPath := "/TMI/v1/auth/login"
@@ -53,7 +53,7 @@ func (a *ArcadyanGateway) Login() (*LoginResult, error) {
 		}
 	}
 
-	resp, err := a.Client.R().
+	resp, err := a.client.R().
 		SetBody(bodyMap).
 		SetResult(&loginResp).
 		Post(reqPath)
@@ -73,8 +73,8 @@ func (a *ArcadyanGateway) Login() (*LoginResult, error) {
 		Expiration: loginResp.Auth.Expiration,
 		Token:      loginResp.Auth.Token,
 	}
-	a.Client.SetAuthToken(a.credentials.Token)
-	a.Authenticated = true
+	a.client.SetAuthToken(a.credentials.Token)
+	a.authenticated = true
 
 	return &LoginResult{
 		Success:    true,
@@ -90,13 +90,13 @@ func (a *ArcadyanGateway) Reboot() error {
 		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
 	}
 
-	if a.config != nil && a.config.DryRun {
+	if a.config.DryRun {
 		return nil
 	}
 
 	rebootRequestPath := "/TMI/v1/gateway/reset?set=reboot"
 
-	resp, err := a.Client.R().Post(rebootRequestPath)
+	resp, err := a.client.R().Post(rebootRequestPath)
 	if err != nil {
 		return fmt.Errorf("reboot request failed: %w", err)
 	}
@@ -115,7 +115,7 @@ func (a *ArcadyanGateway) Info() (*InfoResult, error) {
 
 // Request makes an HTTP request to the gateway.
 func (a *ArcadyanGateway) Request(method, path string) (*InfoResult, error) {
-	resp, err := a.Client.R().Execute(method, path)
+	resp, err := a.client.R().Execute(method, path)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -149,7 +149,7 @@ func (a *ArcadyanGateway) Status() (*StatusResult, error) {
 		}
 	}
 
-	info, err := a.Client.R().SetResult(&result).Get(InfoURL)
+	info, err := a.client.R().SetResult(&result).Get(InfoURL)
 	if err != nil {
 		return &StatusResult{
 			WebInterfaceUp: webResult.WebInterfaceUp,
@@ -182,7 +182,7 @@ func (a *ArcadyanGateway) Signal() (*SignalResult, error) {
 		Signal signalResult `json:"signal"`
 	}
 
-	info, err := a.Client.R().SetResult(&result).Get(InfoURL)
+	info, err := a.client.R().SetResult(&result).Get(InfoURL)
 	if err != nil {
 		return nil, NewGatewayError("signal", 0, "failed to get signal info", err)
 	}

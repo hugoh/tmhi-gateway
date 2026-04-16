@@ -43,10 +43,12 @@ func TestNokiaGateway_getCredentials_ErrorResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewBufferString("server error")),
 		}, nil)
 
-		gw := NewNokiaGateway()
-		gw.Client = client
-		gw.Username = testUsername
-		gw.Password = testPassword
+		gw := &NokiaGateway{
+			GatewayCommon: &GatewayCommon{
+				client: client,
+				config: &GatewayConfig{Username: testUsername, Password: testPassword},
+			},
+		}
 
 		_, err := gw.getCredentials(nonceResp{Nonce: "test"})
 		require.Error(t, err)
@@ -59,10 +61,12 @@ func TestNokiaGateway_getCredentials_ErrorResponse(t *testing.T) {
 			Body:       io.NopCloser(bytes.NewBufferString(`{"success":0,"reason":600}`)),
 		}, nil)
 
-		gw := NewNokiaGateway()
-		gw.Client = client
-		gw.Username = "user"
-		gw.Password = "pass"
+		gw := &NokiaGateway{
+			GatewayCommon: &GatewayCommon{
+				client: client,
+				config: &GatewayConfig{Username: "user", Password: "pass"},
+			},
+		}
 
 		_, err := gw.getCredentials(nonceResp{Nonce: "test"})
 		require.Error(t, err)
@@ -74,10 +78,12 @@ func TestNokiaGateway_Reboot_Success(t *testing.T) {
 	client := NewTestClient(&http.Response{StatusCode: http.StatusOK}, nil)
 	gw := &NokiaGateway{
 		GatewayCommon: &GatewayCommon{
-			Client:        client,
-			Username:      testUsername,
-			Password:      testPassword,
-			Authenticated: true,
+			client:        client,
+			authenticated: true,
+			config: &GatewayConfig{
+				Username: testUsername,
+				Password: testPassword,
+			},
 		},
 		credentials: nokiaLoginData{
 			SID:       "valid-sid",
@@ -94,8 +100,9 @@ func TestNokiaGateway_Status(t *testing.T) {
 		StatusCode: http.StatusOK,
 		Body:       http.NoBody,
 	}, nil)
-	gw := NewNokiaGateway()
-	gw.Client = client
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{client: client, config: &GatewayConfig{}},
+	}
 
 	result, err := gw.Status()
 	require.NoError(t, err)
@@ -105,8 +112,9 @@ func TestNokiaGateway_Status(t *testing.T) {
 
 func TestNokiaGateway_getNonce_ErrorResponse(t *testing.T) {
 	client := NewTestClient(nil, errors.New("network error"))
-	gw := NewNokiaGateway()
-	gw.Client = client
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{client: client, config: &GatewayConfig{}},
+	}
 
 	_, err := gw.getNonce()
 	require.Error(t, err)
@@ -121,8 +129,9 @@ func TestNokiaGateway_getNonce_Success(t *testing.T) {
 	}
 	client := NewTestClient(resp, nil)
 
-	gw := NewNokiaGateway()
-	gw.Client = client
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{client: client, config: &GatewayConfig{}},
+	}
 
 	nonceResp, err := gw.getNonce()
 	require.NoError(t, err)
@@ -139,10 +148,12 @@ func TestNokiaGateway_getCredentials_Success(t *testing.T) {
 	}
 	client := NewTestClient(resp, nil)
 
-	gw := NewNokiaGateway()
-	gw.Client = client
-	gw.Username = testUsername
-	gw.Password = testPassword
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{
+			client: client,
+			config: &GatewayConfig{Username: testUsername, Password: testPassword},
+		},
+	}
 
 	loginResp, err := gw.getCredentials(nonceResp{Nonce: "testNonce", RandomKey: "testRandomKey"})
 	require.NoError(t, err)
@@ -150,9 +161,10 @@ func TestNokiaGateway_getCredentials_Success(t *testing.T) {
 	assert.Equal(t, "testToken", loginResp.CsrfToken)
 }
 
-func TestNokiaGateway_Login_AlreadyAuthenticated(t *testing.T) {
-	gw := NewNokiaGateway()
-	gw.Authenticated = true
+func TestNokiaGateway_Login_Alreadyauthenticated(t *testing.T) {
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{authenticated: true, config: &GatewayConfig{}},
+	}
 
 	result, err := gw.Login()
 	require.NoError(t, err)
@@ -162,8 +174,9 @@ func TestNokiaGateway_Login_AlreadyAuthenticated(t *testing.T) {
 func TestNokiaGateway_Login_NonceError(t *testing.T) {
 	client := NewTestClient(nil, errors.New("network error"))
 
-	gw := NewNokiaGateway()
-	gw.Client = client
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{client: client, config: &GatewayConfig{}},
+	}
 
 	_, err := gw.Login()
 	require.Error(t, err)
@@ -176,10 +189,12 @@ func TestNokiaGateway_Login_CredentialsError(t *testing.T) {
 		Body:       io.NopCloser(bytes.NewBufferString(testNonceBody)),
 	}, nil)
 
-	gw := NewNokiaGateway()
-	gw.Client = client
-	gw.Username = testUsername
-	gw.Password = testPassword
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{
+			client: client,
+			config: &GatewayConfig{Username: testUsername, Password: testPassword},
+		},
+	}
 
 	_, err := gw.Login()
 	assert.Error(t, err)
@@ -189,8 +204,8 @@ func TestNokiaGateway_Reboot_DryRun(t *testing.T) {
 	client := NewTestClient(nil, errors.New("should not be called"))
 	gw := &NokiaGateway{
 		GatewayCommon: &GatewayCommon{
-			Client:        client,
-			Authenticated: true,
+			client:        client,
+			authenticated: true,
 			config:        &GatewayConfig{DryRun: true},
 		},
 		credentials: nokiaLoginData{
@@ -210,8 +225,9 @@ func TestNokiaGateway_Reboot_ErrorResponse(t *testing.T) {
 	}, nil)
 	gw := &NokiaGateway{
 		GatewayCommon: &GatewayCommon{
-			Client:        client,
-			Authenticated: true,
+			client:        client,
+			authenticated: true,
+			config:        &GatewayConfig{},
 		},
 		credentials: nokiaLoginData{
 			SID:       "valid-sid",
@@ -226,8 +242,9 @@ func TestNokiaGateway_Reboot_ErrorResponse(t *testing.T) {
 
 func TestNokiaGateway_Reboot_LoginFailure(t *testing.T) {
 	client := NewTestClient(nil, errors.New("network error"))
-	gw := NewNokiaGateway()
-	gw.Client = client
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{client: client, config: &GatewayConfig{}},
+	}
 
 	err := gw.Reboot()
 	require.Error(t, err)
@@ -243,10 +260,12 @@ func TestNokiaGateway_Login_NonceSuccessCredentialsError(t *testing.T) {
 		},
 	}, []error{nil, nil})
 
-	gw := NewNokiaGateway()
-	gw.Client = client
-	gw.Username = testUsername
-	gw.Password = testPassword
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{
+			client: client,
+			config: &GatewayConfig{Username: testUsername, Password: testPassword},
+		},
+	}
 
 	_, err := gw.Login()
 	require.Error(t, err)
@@ -267,14 +286,16 @@ func TestNokiaGateway_Login_Success(t *testing.T) {
 		},
 	}, []error{nil, nil})
 
-	gw := NewNokiaGateway()
-	gw.Client = client
-	gw.Username = testUsername
-	gw.Password = testPassword
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{
+			client: client,
+			config: &GatewayConfig{Username: testUsername, Password: testPassword},
+		},
+	}
 
 	result, err := gw.Login()
 	require.NoError(t, err)
-	assert.True(t, gw.Authenticated)
+	assert.True(t, gw.authenticated)
 	assert.Equal(t, "testSid", gw.credentials.SID)
 	assert.Equal(t, "testToken", gw.credentials.CSRFToken)
 	assert.True(t, result.Success)
@@ -286,8 +307,9 @@ func TestNokiaGateway_Reboot_RequestError(t *testing.T) {
 	client := NewTestClient(nil, errors.New("network error"))
 	gw := &NokiaGateway{
 		GatewayCommon: &GatewayCommon{
-			Client:        client,
-			Authenticated: true,
+			client:        client,
+			authenticated: true,
+			config:        &GatewayConfig{},
 		},
 		credentials: nokiaLoginData{
 			SID:       "valid-sid",
@@ -301,7 +323,9 @@ func TestNokiaGateway_Reboot_RequestError(t *testing.T) {
 }
 
 func TestNokiaGateway_NotImplemented(t *testing.T) {
-	gw := NewNokiaGateway()
+	gw := &NokiaGateway{
+		GatewayCommon: &GatewayCommon{config: &GatewayConfig{}},
+	}
 
 	t.Run("Request", func(t *testing.T) {
 		_, err := gw.Request("GET", "/test")

@@ -41,9 +41,7 @@ func main() {
         Timeout:  5 * time.Second,
     }
 
-    gw := gateway.NewArcadyanGateway()
-    gw.NewClient(cfg)
-    gw.AddCredentials(cfg.Username, cfg.Password)
+    gw := gateway.NewArcadyanGateway(cfg)
 
     result, err := gw.Login()
     if err != nil {
@@ -56,8 +54,8 @@ func main() {
 
 ## Supported Gateways
 
-- **Nokia** (`NewNokiaGateway()`)
-- **Arcadyan** (`NewArcadyanGateway()`)
+- **Nokia** (`NewNokiaGateway(cfg)`)
+- **Arcadyan** (`NewArcadyanGateway(cfg)`)
 
 ## API
 
@@ -67,10 +65,8 @@ All gateway implementations satisfy the `Gateway` interface:
 
 ```go
 type Gateway interface {
-    NewClient(cfg *GatewayConfig)
-    AddCredentials(username, password string)
     Login() (*LoginResult, error)
-    Reboot(dryRun bool) error
+    Reboot() error
     Request(method, path string) (*InfoResult, error)
     Info() (*InfoResult, error)
     Status() (*StatusResult, error)

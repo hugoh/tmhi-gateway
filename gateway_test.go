@@ -50,32 +50,21 @@ func NewMultiTestClient(responses []*http.Response, errors []error) *resty.Clien
 }
 
 func TestNewGatewayCommon(t *testing.T) {
-	gc := NewGatewayCommon()
-	assert.NotNil(t, gc.Client)
-	assert.Equal(t, 0, gc.Client.RetryCount)
-	assert.False(t, gc.Authenticated)
-	assert.Empty(t, gc.Username)
-	assert.Empty(t, gc.Password)
-
 	cfg := &GatewayConfig{
 		IP:      "192.168.1.1",
 		Timeout: 5 * time.Second,
 		Retries: 3,
 		Debug:   true,
 	}
-	gc.NewClient(cfg)
+	gc := NewGatewayCommon(cfg)
 
-	assert.Equal(t, "http://192.168.1.1", gc.Client.BaseURL)
-	assert.Equal(t, cfg.Timeout, gc.Client.GetClient().Timeout)
-	assert.Equal(t, cfg.Retries, gc.Client.RetryCount)
-	assert.True(t, gc.Client.Debug)
-}
-
-func TestAddCredentials(t *testing.T) {
-	gc := NewGatewayCommon()
-	gc.AddCredentials("admin", "password")
-	assert.Equal(t, "admin", gc.Username)
-	assert.Equal(t, "password", gc.Password)
+	assert.NotNil(t, gc.client)
+	assert.Equal(t, "http://192.168.1.1", gc.client.BaseURL)
+	assert.Equal(t, cfg.Timeout, gc.client.GetClient().Timeout)
+	assert.Equal(t, cfg.Retries, gc.client.RetryCount)
+	assert.True(t, gc.client.Debug)
+	assert.False(t, gc.authenticated)
+	assert.Equal(t, cfg, gc.config)
 }
 
 func TestCheckWebInterface(t *testing.T) {
@@ -122,8 +111,7 @@ func TestCheckWebInterface(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			client := NewTestClient(tc.resp, tc.err)
-			gc := NewGatewayCommon()
-			gc.Client = client
+			gc := &GatewayCommon{client: client, config: &GatewayConfig{}}
 
 			result := gc.CheckWebInterface()
 			assert.Equal(t, tc.wantUp, result.WebInterfaceUp)

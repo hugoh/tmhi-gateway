@@ -41,7 +41,7 @@ func (l *nokiaLoginResp) success() bool {
 
 // Login authenticates with the Nokia gateway.
 func (n *NokiaGateway) Login() (*LoginResult, error) {
-	if n.authenticated {
+	if n.isLoggedIn() {
 		return &LoginResult{Success: true}, nil
 	}
 
@@ -57,7 +57,6 @@ func (n *NokiaGateway) Login() (*LoginResult, error) {
 
 	n.credentials.SID = loginResp.Sid
 	n.credentials.CSRFToken = loginResp.CsrfToken
-	n.authenticated = true
 	n.client.SetHeader("Cookie", "sid="+n.credentials.SID)
 
 	return &LoginResult{
@@ -113,6 +112,10 @@ func (n *NokiaGateway) Status() (*StatusResult, error) {
 // Signal is not implemented for Nokia gateway.
 func (n *NokiaGateway) Signal() (*SignalResult, error) {
 	return nil, ErrNotImplemented
+}
+
+func (n *NokiaGateway) isLoggedIn() bool {
+	return n.credentials.SID != "" && n.credentials.CSRFToken != ""
 }
 
 func (n *NokiaGateway) getCredentials(nonceResp nonceResp) (*nokiaLoginResp, error) {

@@ -63,7 +63,6 @@ func TestNewGatewayCommon(t *testing.T) {
 	assert.Equal(t, cfg.Timeout, gc.client.GetClient().Timeout)
 	assert.Equal(t, cfg.Retries, gc.client.RetryCount)
 	assert.True(t, gc.client.Debug)
-	assert.False(t, gc.authenticated)
 	assert.Equal(t, cfg, gc.config)
 }
 

@@ -74,7 +74,6 @@ func (a *ArcadyanGateway) Login() (*LoginResult, error) {
 		Token:      loginResp.Auth.Token,
 	}
 	a.client.SetAuthToken(a.credentials.Token)
-	a.authenticated = true
 
 	return &LoginResult{
 		Success:    true,
@@ -173,6 +172,10 @@ func (a *ArcadyanGateway) Status() (*StatusResult, error) {
 		)
 	}
 
+	if info.RawResponse != nil && info.RawResponse.Body != nil {
+		_ = info.RawResponse.Body.Close()
+	}
+
 	return webResult, nil
 }
 
@@ -194,6 +197,10 @@ func (a *ArcadyanGateway) Signal() (*SignalResult, error) {
 			ErrSignalFailed.Error(),
 			ErrSignalFailed,
 		)
+	}
+
+	if info.RawResponse != nil && info.RawResponse.Body != nil {
+		_ = info.RawResponse.Body.Close()
 	}
 
 	return convertSignalResult(result.Signal), nil

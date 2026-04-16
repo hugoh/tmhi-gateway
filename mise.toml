@@ -43,3 +43,7 @@ run = ["golangci-lint fmt ./...", "prettier --write ."]
 [tasks.tidy]
 description = "Tidy the module"
 run = "go mod tidy -v"
+
+[tasks.depup]
+description = "Upgrade dependencies"
+run = ["go get -u -t ./...", "go mod tidy -v"]

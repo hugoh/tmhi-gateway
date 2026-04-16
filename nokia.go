@@ -31,8 +31,8 @@ type NokiaGateway struct {
 }
 
 // NewNokiaGateway creates a new Nokia gateway instance.
-func NewNokiaGateway() *NokiaGateway {
-	return &NokiaGateway{GatewayCommon: &GatewayCommon{}}
+func NewNokiaGateway(cfg *GatewayConfig) *NokiaGateway {
+	return &NokiaGateway{GatewayCommon: NewGatewayCommon(cfg)}
 }
 
 func (l *nokiaLoginResp) success() bool {
@@ -41,7 +41,7 @@ func (l *nokiaLoginResp) success() bool {
 
 // Login authenticates with the Nokia gateway.
 func (n *NokiaGateway) Login() (*LoginResult, error) {
-	if n.Authenticated {
+	if n.authenticated {
 		return &LoginResult{Success: true}, nil
 	}
 
@@ -57,8 +57,8 @@ func (n *NokiaGateway) Login() (*LoginResult, error) {
 
 	n.credentials.SID = loginResp.Sid
 	n.credentials.CSRFToken = loginResp.CsrfToken
-	n.Authenticated = true
-	n.Client.SetHeader("Cookie", "sid="+n.credentials.SID)
+	n.authenticated = true
+	n.client.SetHeader("Cookie", "sid="+n.credentials.SID)
 
 	return &LoginResult{
 		Success:   true,
@@ -77,11 +77,11 @@ func (n *NokiaGateway) Reboot() error {
 		"csrf_token": n.credentials.CSRFToken,
 	}
 
-	if n.config != nil && n.config.DryRun {
+	if n.config.DryRun {
 		return nil
 	}
 
-	req := n.Client.R().SetFormData(formData)
+	req := n.client.R().SetFormData(formData)
 
 	resp, err := req.Execute("POST", "/reboot_web_app.cgi")
 	if err != nil {
@@ -116,11 +116,11 @@ func (n *NokiaGateway) Signal() (*SignalResult, error) {
 }
 
 func (n *NokiaGateway) getCredentials(nonceResp nonceResp) (*nokiaLoginResp, error) {
-	passHashInput := strings.ToLower(n.Password)
-	userPassHash := Sha256Hash(n.Username, passHashInput)
+	passHashInput := strings.ToLower(n.config.Password)
+	userPassHash := Sha256Hash(n.config.Username, passHashInput)
 	userPassNonceHash := Sha256Url(userPassHash, nonceResp.Nonce)
 	reqParams := map[string]string{
-		"userhash":      Sha256Url(n.Username, nonceResp.Nonce),
+		"userhash":      Sha256Url(n.config.Username, nonceResp.Nonce),
 		"RandomKeyhash": Sha256Url(nonceResp.RandomKey, nonceResp.Nonce),
 		"response":      userPassNonceHash,
 		"nonce":         Base64urlEscape(nonceResp.Nonce),
@@ -132,7 +132,7 @@ func (n *NokiaGateway) getCredentials(nonceResp nonceResp) (*nokiaLoginResp, err
 
 	var loginResp nokiaLoginResp
 
-	resp, err := n.Client.R().
+	resp, err := n.client.R().
 		SetFormData(reqParams).
 		SetResult(&loginResp).
 		Post(reqURL)
@@ -157,7 +157,7 @@ func (n *NokiaGateway) getCredentials(nonceResp nonceResp) (*nokiaLoginResp, err
 func (n *NokiaGateway) getNonce() (*nonceResp, error) {
 	var resp nonceResp
 
-	_, err := n.Client.R().
+	_, err := n.client.R().
 		SetResult(&resp).
 		Get("/login_web_app.cgi?nonce")
 	if err != nil {

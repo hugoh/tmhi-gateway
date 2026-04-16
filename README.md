@@ -3,6 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/hugoh/tmhi-gateway.svg)](https://pkg.go.dev/github.com/hugoh/tmhi-gateway)
 [![codecov](https://codecov.io/gh/hugoh/tmhi-gateway/graph/badge.svg?token=MCZUXN8MHO)](https://codecov.io/gh/hugoh/tmhi-gateway)
 [![CI](https://github.com/hugoh/tmhi-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/hugoh/tmhi-gateway/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/hugoh/tmhi-gateway)](https://goreportcard.com/report/github.com/hugoh/tmhi-gateway)
 
 Go library for interacting with T-Mobile Home Internet gateways (Nokia and Arcadyan models).
 
@@ -40,9 +41,7 @@ func main() {
         Timeout:  5 * time.Second,
     }
 
-    gw := gateway.NewArcadyanGateway()
-    gw.NewClient(cfg)
-    gw.AddCredentials(cfg.Username, cfg.Password)
+    gw := gateway.NewArcadyanGateway(cfg)
 
     result, err := gw.Login()
     if err != nil {
@@ -55,8 +54,8 @@ func main() {
 
 ## Supported Gateways
 
-- **Nokia** (`NewNokiaGateway()`)
-- **Arcadyan** (`NewArcadyanGateway()`)
+- **Nokia** (`NewNokiaGateway(cfg)`)
+- **Arcadyan** (`NewArcadyanGateway(cfg)`)
 
 ## API
 
@@ -66,10 +65,8 @@ All gateway implementations satisfy the `Gateway` interface:
 
 ```go
 type Gateway interface {
-    NewClient(cfg *GatewayConfig)
-    AddCredentials(username, password string)
     Login() (*LoginResult, error)
-    Reboot(dryRun bool) error
+    Reboot() error
     Request(method, path string) (*InfoResult, error)
     Info() (*InfoResult, error)
     Status() (*StatusResult, error)

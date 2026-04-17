@@ -102,5 +102,4 @@ mise ci
 
 MIT License - see [LICENSE](LICENSE) for details.
 
-
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fhugoh%2Ftmhi-gateway.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fhugoh%2Ftmhi-gateway?ref=badge_large)

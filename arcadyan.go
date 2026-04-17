@@ -142,7 +142,7 @@ func (a *ArcadyanGateway) Status() (*StatusResult, error) {
 
 	var result struct {
 		Signal struct {
-			Generic struct {
+			Generic struct { // NOSONAR(S8205)
 				Registration string
 			}
 		}

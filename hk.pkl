@@ -1,0 +1,33 @@
+amends "package://github.com/jdx/hk/releases/download/v1.43.0/hk@1.43.0#/Config.pkl"
+import "package://github.com/jdx/hk/releases/download/v1.43.0/hk@1.43.0#/Builtins.pkl"
+
+local linters = new Mapping<String, Step> {
+  ["golangci-lint"] = Builtins.golangci_lint
+  ["markdown-lint"] = Builtins.markdown_lint
+  ["prettier"] = Builtins.prettier
+  ["zizmor"] = Builtins.zizmor
+}
+
+hooks {
+  ["pre-commit"] {
+    stash = "git"
+    steps = linters
+  }
+  ["fix"] {
+    fix = true
+    steps = linters
+  }
+  ["check"] {
+    steps = linters
+  }
+  ["pre-push"] {
+    steps {
+      ["go-vuln-check"] = Builtins.go_vuln_check
+    }
+  }
+  ["commit-msg"] {
+    steps {
+      ["check-conventional-commit"] = Builtins.check_conventional_commit
+    }
+  }
+}

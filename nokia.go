@@ -95,12 +95,12 @@ func (n *NokiaGateway) Reboot() error {
 }
 
 // Request is not implemented for Nokia gateway.
-func (n *NokiaGateway) Request(_, _ string) (*InfoResult, error) {
+func (*NokiaGateway) Request(_, _ string) (*InfoResult, error) {
 	return nil, ErrNotImplemented
 }
 
 // Info is not implemented for Nokia gateway.
-func (n *NokiaGateway) Info() (*InfoResult, error) {
+func (*NokiaGateway) Info() (*InfoResult, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -110,7 +110,7 @@ func (n *NokiaGateway) Status() (*StatusResult, error) {
 }
 
 // Signal is not implemented for Nokia gateway.
-func (n *NokiaGateway) Signal() (*SignalResult, error) {
+func (*NokiaGateway) Signal() (*SignalResult, error) {
 	return nil, ErrNotImplemented
 }
 

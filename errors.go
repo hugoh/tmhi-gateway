@@ -34,11 +34,11 @@ func (e *AuthenticationError) Error() string {
 }
 
 // Is checks if the target error matches ErrAuthentication.
-func (e *AuthenticationError) Is(target error) bool {
+func (*AuthenticationError) Is(target error) bool {
 	return target == ErrAuthentication
 }
 
-func (e *AuthenticationError) Unwrap() error {
+func (*AuthenticationError) Unwrap() error {
 	return ErrAuthentication
 }
 

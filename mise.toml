@@ -1,12 +1,17 @@
 [tools]
 go = "1.26.2"
 "go:github.com/vladopajic/go-test-coverage/v2" = "2.18.4"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.2.0"
 golangci-lint = "2.11.4"
 gotestsum = "1.13.0"
+hk = "1.43.0"
+"npm:markdownlint-cli" = "0.48.0"
 prettier = "3.8.3"
+zizmor = "1.24.1"
 
 [env]
 COVEROUT = "cover.out"
+HK_PKL_BACKEND = "pklr"
 
 [tasks.lint]
 description = "Lint code"

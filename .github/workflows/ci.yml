@@ -1,3 +1,4 @@
+---
 name: CI
 
 on:
@@ -9,6 +10,24 @@ on:
 permissions: {}
 
 jobs:
+  hk:
+    permissions:
+      contents: read
+      packages: read
+      # To report GitHub Actions status checks
+      statuses: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac
+      - name: hk checks
+        run: hk check --no-progress --profile ci --all
+      - name: Display hk log on failure
+        if: failure()
+        run: cat /home/runner/.local/state/hk/output.log
+
   lint:
     runs-on: ubuntu-latest
     permissions:
@@ -53,7 +72,7 @@ jobs:
 
   release:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [hk, build]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write

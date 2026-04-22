@@ -5,8 +5,8 @@ local linters = new Mapping<String, Step> {
   ["golangci-lint"] = (Builtins.golangci_lint) {
     profiles = List("!ci")
   }
-  ["markdown-lint"] = Builtins.markdown_lint
-  ["prettier"] = Builtins.prettier
+  ["markdown"] = Builtins.rumdl
+  ["dprint"] = Builtins.dprint
   ["zizmor"] = Builtins.zizmor
 }
 

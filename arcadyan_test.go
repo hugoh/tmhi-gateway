@@ -13,12 +13,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	textContentType = "text/plain"
+)
+
 func strBody(s string) io.ReadCloser { return io.NopCloser(bytes.NewBufferString(s)) }
 
 func jsonResponse(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Header:     http.Header{contentType: []string{jsonContentType}},
 		Body:       strBody(body),
 	}
 }
@@ -26,7 +30,7 @@ func jsonResponse(status int, body string) *http.Response {
 func textResponse(status int, body string) *http.Response {
 	return &http.Response{
 		StatusCode: status,
-		Header:     http.Header{"Content-Type": []string{"text/plain"}},
+		Header:     http.Header{contentType: []string{textContentType}},
 		Body:       strBody(body),
 	}
 }
@@ -59,7 +63,12 @@ func TestArcadyanGateway_Login_Success(t *testing.T) {
 	body := `{"auth":{"expiration":1234567890,"refreshCountLeft":5,"refreshCountMax":10,"token":"testtoken"}}`
 	client := NewTestClient(jsonResponse(http.StatusOK, body), nil) //nolint:bodyclose // test mock
 
-	gw := newArcadyan(client, &GatewayConfig{Username: "user", Password: "pass"}, "", time.Time{})
+	gw := newArcadyan(
+		client,
+		&GatewayConfig{Username: testUsername, Password: testPassword},
+		"",
+		time.Time{},
+	)
 
 	result, err := gw.Login()
 	require.NoError(t, err)
@@ -75,7 +84,7 @@ func TestArcadyanGateway_Reboot_Failure(t *testing.T) {
 
 	gw := newArcadyan(
 		client,
-		&GatewayConfig{Username: "user", Password: "pass"},
+		&GatewayConfig{Username: testUsername, Password: testPassword},
 		"valid-token",
 		time.Now().Add(1*time.Hour),
 	)
@@ -86,7 +95,7 @@ func TestArcadyanGateway_Reboot_Failure(t *testing.T) {
 }
 
 func TestArcadyanGateway_Reboot_DryRun(t *testing.T) {
-	cfg := &GatewayConfig{Username: "user", Password: "pass", DryRun: true}
+	cfg := &GatewayConfig{Username: testUsername, Password: testPassword, DryRun: true}
 	gw := newArcadyan(
 		nil,
 		cfg,
@@ -104,7 +113,7 @@ func TestArcadyanGateway_Reboot_Success(t *testing.T) {
 
 	gw := newArcadyan(
 		client,
-		&GatewayConfig{Username: "user", Password: "pass"},
+		&GatewayConfig{Username: testUsername, Password: testPassword},
 		"valid-token",
 		time.Now().Add(1*time.Hour),
 	)
@@ -117,7 +126,12 @@ func TestArcadyanGateway_Login_Non200Status(t *testing.T) {
 	//nolint:bodyclose // test mock
 	client := NewTestClient(textResponse(http.StatusUnauthorized, "unauthorized"), nil)
 
-	gw := newArcadyan(client, &GatewayConfig{Username: "user", Password: "pass"}, "", time.Time{})
+	gw := newArcadyan(
+		client,
+		&GatewayConfig{Username: testUsername, Password: testPassword},
+		"",
+		time.Time{},
+	)
 
 	_, err := gw.Login()
 	require.Error(t, err)
@@ -130,7 +144,12 @@ func TestArcadyanGateway_Login_InvalidJSON(t *testing.T) {
 	//nolint:bodyclose // test mock
 	client := NewTestClient(jsonResponse(http.StatusOK, "{invalid json"), nil)
 
-	gw := newArcadyan(client, &GatewayConfig{Username: "user", Password: "pass"}, "", time.Time{})
+	gw := newArcadyan(
+		client,
+		&GatewayConfig{Username: testUsername, Password: testPassword},
+		"",
+		time.Time{},
+	)
 
 	_, err := gw.Login()
 	require.Error(t, err)
@@ -140,7 +159,12 @@ func TestArcadyanGateway_Login_InvalidJSON(t *testing.T) {
 func TestArcadyanGateway_Login_HTTPClientError(t *testing.T) {
 	client := NewTestClient(nil, errors.New("network error"))
 
-	gw := newArcadyan(client, &GatewayConfig{Username: "user", Password: "pass"}, "", time.Time{})
+	gw := newArcadyan(
+		client,
+		&GatewayConfig{Username: testUsername, Password: testPassword},
+		"",
+		time.Time{},
+	)
 
 	_, err := gw.Login()
 	require.Error(t, err)
@@ -151,7 +175,12 @@ func TestArcadyanGateway_Info_Success(t *testing.T) {
 	//nolint:bodyclose // test mock
 	client := NewTestClient(jsonResponse(http.StatusOK, `{"system": {"model": "TEST123"}}`), nil)
 
-	gw := newArcadyan(client, &GatewayConfig{Username: "user", Password: "pass"}, "", time.Time{})
+	gw := newArcadyan(
+		client,
+		&GatewayConfig{Username: testUsername, Password: testPassword},
+		"",
+		time.Time{},
+	)
 
 	result, err := gw.Info()
 	require.NoError(t, err)
@@ -206,7 +235,7 @@ func TestArcadyanGateway_Status(t *testing.T) {
 
 		gw := newArcadyan(
 			client,
-			&GatewayConfig{Username: "user", Password: "pass"},
+			&GatewayConfig{Username: testUsername, Password: testPassword},
 			"valid-token",
 			time.Now().Add(1*time.Hour),
 		)
@@ -223,7 +252,7 @@ func TestArcadyanGateway_Status(t *testing.T) {
 
 		gw := newArcadyan(
 			client,
-			&GatewayConfig{Username: "user", Password: "pass"},
+			&GatewayConfig{Username: testUsername, Password: testPassword},
 			"valid-token",
 			time.Now().Add(1*time.Hour),
 		)
@@ -254,7 +283,7 @@ func TestArcadyanGateway_Request_Methods(t *testing.T) {
 
 		gw := newArcadyan(
 			client,
-			&GatewayConfig{Username: "user", Password: "pass"},
+			&GatewayConfig{Username: testUsername, Password: testPassword},
 			"valid-token",
 			time.Now().Add(1*time.Hour),
 		)
@@ -325,7 +354,7 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 
 		gw := newArcadyan(
 			client,
-			&GatewayConfig{Username: "user", Password: "pass"},
+			&GatewayConfig{Username: testUsername, Password: testPassword},
 			"valid-token",
 			time.Now().Add(1*time.Hour),
 		)
@@ -391,7 +420,7 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 
 		gw := newArcadyan(
 			client,
-			&GatewayConfig{Username: "user", Password: "pass"},
+			&GatewayConfig{Username: testUsername, Password: testPassword},
 			"valid-token",
 			time.Now().Add(1*time.Hour),
 		)
@@ -430,7 +459,7 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 
 		gw := newArcadyan(
 			client,
-			&GatewayConfig{Username: "user", Password: "pass"},
+			&GatewayConfig{Username: testUsername, Password: testPassword},
 			"valid-token",
 			time.Now().Add(1*time.Hour),
 		)
@@ -447,7 +476,7 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 
 		gw := newArcadyan(
 			client,
-			&GatewayConfig{Username: "user", Password: "pass"},
+			&GatewayConfig{Username: testUsername, Password: testPassword},
 			"valid-token",
 			time.Now().Add(1*time.Hour),
 		)
@@ -463,7 +492,7 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 
 		gw := newArcadyan(
 			client,
-			&GatewayConfig{Username: "user", Password: "pass"},
+			&GatewayConfig{Username: testUsername, Password: testPassword},
 			"valid-token",
 			time.Now().Add(1*time.Hour),
 		)
@@ -478,7 +507,7 @@ func TestInfoResult_String(t *testing.T) {
 	t.Run("pretty prints JSON content", func(t *testing.T) {
 		result := &InfoResult{
 			Raw:         []byte(`{"name":"test","value":123}`),
-			ContentType: "application/json",
+			ContentType: jsonContentType,
 		}
 
 		expected := "{\n \"name\": \"test\",\n \"value\": 123\n}"

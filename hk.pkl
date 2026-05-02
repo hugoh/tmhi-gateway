@@ -5,14 +5,26 @@ local linters = new Mapping<String, Step> {
   ["golangci-lint"] = (Builtins.golangci_lint) {
     profiles = List("!ci")
   }
+  ["gomod-tidy"] = Builtins.gomod_tidy
+  ["actionlint"] = Builtins.actionlint
+  ["conflicts"] = Builtins.check_merge_conflict
+  ["case-conflict"] = Builtins.check_case_conflict
+  ["large-files"] = Builtins.check_added_large_files
+  ["executables"] = Builtins.check_executables_have_shebangs
+  ["gitleaks"] = Builtins.gitleaks
+  ["ghalint"] = Builtins.ghalint_workflow
   ["markdown"] = Builtins.rumdl
   ["dprint"] = Builtins.dprint
   ["zizmor"] = Builtins.zizmor
+  ["shellcheck"] = Builtins.shellcheck
 }
 
 hooks {
   ["pre-commit"] {
     stash = "git"
+    steps = linters
+  }
+  ["pre-push"] {
     steps = linters
   }
   ["fix"] {
@@ -21,11 +33,6 @@ hooks {
   }
   ["check"] {
     steps = linters
-  }
-  ["pre-push"] {
-    steps {
-      ["go-vuln-check"] = Builtins.go_vuln_check
-    }
   }
   ["commit-msg"] {
     steps {

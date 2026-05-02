@@ -9,7 +9,11 @@ import (
 )
 
 // InfoURL is the endpoint for gateway information.
-const InfoURL = "/TMI/v1/gateway/?get=all"
+const (
+	InfoURL         = "/TMI/v1/gateway/?get=all"
+	contentType     = "Content-Type"
+	jsonContentType = "application/json"
+)
 
 // ArcadyanGateway implements Gateway for Arcadyan-based T-Mobile gateways.
 type ArcadyanGateway struct {
@@ -119,10 +123,10 @@ func (a *ArcadyanGateway) Request(method, path string) (*InfoResult, error) {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	contentType := resp.Header().Get("Content-Type")
+	contentType := resp.Header().Get(contentType)
 
 	var data map[string]any
-	if strings.HasPrefix(contentType, "application/json") {
+	if strings.HasPrefix(contentType, jsonContentType) {
 		if err := json.Unmarshal(resp.Body(), &data); err != nil {
 			return nil, fmt.Errorf("json unmarshal failed: %w", err)
 		}

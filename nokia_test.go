@@ -16,6 +16,8 @@ const (
 	testPassword      = "pass"
 	testNonceBody     = `{"nonce":"testNonce","pubkey":"testPubkey","randomKey":"testRandomKey"}`
 	testLoginRespBody = `{"success":0,"reason":0,"sid":"testSid","token":"testToken"}`
+	testValidSID      = "valid-sid"
+	testValidToken    = "valid-token"
 )
 
 func Test_LoginSuccess(t *testing.T) {
@@ -64,7 +66,7 @@ func TestNokiaGateway_getCredentials_ErrorResponse(t *testing.T) {
 		gw := &NokiaGateway{
 			GatewayCommon: &GatewayCommon{
 				client: client,
-				config: &GatewayConfig{Username: "user", Password: "pass"},
+				config: &GatewayConfig{Username: testUsername, Password: testPassword},
 			},
 		}
 
@@ -85,8 +87,8 @@ func TestNokiaGateway_Reboot_Success(t *testing.T) {
 			},
 		},
 		credentials: nokiaLoginData{
-			SID:       "valid-sid",
-			CSRFToken: "valid-token",
+			SID:       testValidSID,
+			CSRFToken: testValidToken,
 		},
 	}
 
@@ -123,7 +125,7 @@ func TestNokiaGateway_getNonce_ErrorResponse(t *testing.T) {
 func TestNokiaGateway_getNonce_Success(t *testing.T) {
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Header:     http.Header{contentType: []string{jsonContentType}},
 		Body:       io.NopCloser(bytes.NewBufferString(testNonceBody)),
 	}
 	client := NewTestClient(resp, nil)
@@ -142,7 +144,7 @@ func TestNokiaGateway_getNonce_Success(t *testing.T) {
 func TestNokiaGateway_getCredentials_Success(t *testing.T) {
 	resp := &http.Response{
 		StatusCode: http.StatusOK,
-		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Header:     http.Header{contentType: []string{jsonContentType}},
 		Body:       io.NopCloser(bytes.NewBufferString(testLoginRespBody)),
 	}
 	client := NewTestClient(resp, nil)
@@ -208,8 +210,8 @@ func TestNokiaGateway_Reboot_DryRun(t *testing.T) {
 			config: &GatewayConfig{DryRun: true},
 		},
 		credentials: nokiaLoginData{
-			SID:       "valid-sid",
-			CSRFToken: "valid-token",
+			SID:       testValidSID,
+			CSRFToken: testValidToken,
 		},
 	}
 
@@ -228,8 +230,8 @@ func TestNokiaGateway_Reboot_ErrorResponse(t *testing.T) {
 			config: &GatewayConfig{},
 		},
 		credentials: nokiaLoginData{
-			SID:       "valid-sid",
-			CSRFToken: "valid-token",
+			SID:       testValidSID,
+			CSRFToken: testValidToken,
 		},
 	}
 
@@ -274,12 +276,12 @@ func TestNokiaGateway_Login_Success(t *testing.T) {
 	client := NewMultiTestClient([]*http.Response{
 		{
 			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Header:     http.Header{contentType: []string{jsonContentType}},
 			Body:       io.NopCloser(bytes.NewBufferString(testNonceBody)),
 		},
 		{
 			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Header:     http.Header{contentType: []string{jsonContentType}},
 			Body:       io.NopCloser(bytes.NewBufferString(testLoginRespBody)),
 		},
 	}, []error{nil, nil})
@@ -308,8 +310,8 @@ func TestNokiaGateway_Reboot_RequestError(t *testing.T) {
 			config: &GatewayConfig{},
 		},
 		credentials: nokiaLoginData{
-			SID:       "valid-sid",
-			CSRFToken: "valid-token",
+			SID:       testValidSID,
+			CSRFToken: testValidToken,
 		},
 	}
 

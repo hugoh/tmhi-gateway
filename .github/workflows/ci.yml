@@ -14,15 +14,17 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: read
-      # To report GitHub Actions status checks
-      statuses: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - &checkout-full
+        name: Checkout code with full history
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac
+          fetch-depth: 0
+      - &mise
+        name: Setup mise
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151
       - name: hk checks
         run: hk check --no-progress --profile ci --all
       - name: Display hk log on failure
@@ -35,10 +37,25 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
-      - uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151
+      - name: Get Go version
+        id: go-version
+        run: |
+          GO_VERSION=$(grep '^go ' mise.toml | sed 's/.*"\(.*\)"/\1/')
+          echo "go=${GO_VERSION}" >> "$GITHUB_OUTPUT"
+      - name: Cache Go modules
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ steps.go-version.outputs.go }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ steps.go-version.outputs.go }}-
+      - *mise
       - name: Lint
         run: mise lint
       - name: Test
@@ -60,10 +77,21 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - *checkout-full
+      - *mise
+      - name: Semver release
+        uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20
         with:
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: go-semantic-release/action@2e9dc4247a6004f8377781bef4cb9dad273a741f
+          command: bump
+          args: --auto
+      - name: Push tag
+        run: |
+          TAG=$(git tag --points-at HEAD | head -1)
+          if [ -z "$TAG" ]; then
+            echo "No tag at HEAD — skipping release"
+          else
+            echo "Pushing ${TAG}"
+            git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(echo -n "x-access-token:${GITHUB_TOKEN}" | base64)" push origin "${TAG}"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

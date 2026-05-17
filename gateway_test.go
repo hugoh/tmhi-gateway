@@ -51,7 +51,7 @@ func NewMultiTestClient(responses []*http.Response, errors []error) *resty.Clien
 
 func TestNewGatewayCommon(t *testing.T) {
 	cfg := &GatewayConfig{
-		IP:      "192.168.1.1",
+		IP:      testIP,
 		Timeout: 5 * time.Second,
 		Retries: 3,
 		Debug:   true,

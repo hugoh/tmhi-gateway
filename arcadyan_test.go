@@ -122,53 +122,62 @@ func TestArcadyanGateway_Reboot_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestArcadyanGateway_Login_Non200Status(t *testing.T) {
+func TestArcadyanGateway_Login_Errors(t *testing.T) {
 	//nolint:bodyclose // test mock
-	client := NewTestClient(textResponse(http.StatusUnauthorized, "unauthorized"), nil)
-
-	gw := newArcadyan(
-		client,
-		&GatewayConfig{Username: testUsername, Password: testPassword},
-		"",
-		time.Time{},
-	)
-
-	_, err := gw.Login()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "authentication failed")
-	assert.Contains(t, err.Error(), "401")
-	assert.ErrorIs(t, err, ErrAuthentication)
-}
-
-func TestArcadyanGateway_Login_InvalidJSON(t *testing.T) {
+	unauthorizedResp := textResponse(http.StatusUnauthorized, "unauthorized")
 	//nolint:bodyclose // test mock
-	client := NewTestClient(jsonResponse(http.StatusOK, "{invalid json"), nil)
+	invalidJSONResp := jsonResponse(http.StatusOK, "{invalid json")
 
-	gw := newArcadyan(
-		client,
-		&GatewayConfig{Username: testUsername, Password: testPassword},
-		"",
-		time.Time{},
-	)
+	cases := []struct {
+		name          string
+		response      *http.Response
+		err           error
+		errorContains []string
+		errorIs       error
+	}{
+		{
+			name:          "non-200 status",
+			response:      unauthorizedResp,
+			err:           nil,
+			errorContains: []string{"authentication failed", "401"},
+			errorIs:       ErrAuthentication,
+		},
+		{
+			name:          "invalid JSON",
+			response:      invalidJSONResp,
+			err:           nil,
+			errorContains: []string{"failed to decode login response"},
+		},
+		{
+			name:          "HTTP client error",
+			response:      nil,
+			err:           errors.New("network error"),
+			errorContains: []string{"login request failed"},
+		},
+	}
 
-	_, err := gw.Login()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to decode login response")
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client := NewTestClient(tc.response, tc.err)
+			gw := newArcadyan(
+				client,
+				&GatewayConfig{Username: testUsername, Password: testPassword},
+				"",
+				time.Time{},
+			)
 
-func TestArcadyanGateway_Login_HTTPClientError(t *testing.T) {
-	client := NewTestClient(nil, errors.New("network error"))
+			_, err := gw.Login()
+			require.Error(t, err)
 
-	gw := newArcadyan(
-		client,
-		&GatewayConfig{Username: testUsername, Password: testPassword},
-		"",
-		time.Time{},
-	)
+			for _, msg := range tc.errorContains {
+				assert.Contains(t, err.Error(), msg)
+			}
 
-	_, err := gw.Login()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "login request failed")
+			if tc.errorIs != nil {
+				assert.ErrorIs(t, err, tc.errorIs)
+			}
+		})
+	}
 }
 
 func TestArcadyanGateway_Info_Success(t *testing.T) {
@@ -218,7 +227,7 @@ func TestArcadyanGateway_isLoggedIn(t *testing.T) {
 }
 
 func TestNewArcadyanGateway(t *testing.T) {
-	cfg := &GatewayConfig{IP: "192.168.1.1"}
+	cfg := &GatewayConfig{IP: testIP}
 	gw := NewArcadyanGateway(cfg)
 	assert.NotNil(t, gw)
 	assert.NotNil(t, gw.client)
@@ -317,189 +326,194 @@ func TestArcadyanGateway_Request_Methods(t *testing.T) {
 }
 
 func TestArcadyanGateway_Signal(t *testing.T) {
-	t.Run("successful signal retrieval with 4g and 5g", func(t *testing.T) {
-		body := `{
-			"signal": {
-				"4g": {
-					"bands": ["b2"],
-					"bars": 4.0,
-					"cid": 12,
-					"eNBID": 310463,
-					"rsrp": -95,
-					"rsrq": -8,
-					"rssi": -85,
-					"sinr": 15
+	t.Run("successful signal retrieval", func(t *testing.T) {
+		cases := []struct {
+			name  string
+			body  string
+			check func(t *testing.T, result *SignalResult)
+		}{
+			{
+				name: "with 4g and 5g",
+				body: `{
+					"signal": {
+						"4g": {
+							"bands": ["b2"],
+							"bars": 4.0,
+							"cid": 12,
+							"eNBID": 310463,
+							"rsrp": -95,
+							"rsrq": -8,
+							"rssi": -85,
+							"sinr": 15
+						},
+						"5g": {
+							"antennaUsed": "Internal_directional",
+							"bands": ["n41"],
+							"bars": 5.0,
+							"cid": 311,
+							"gNBID": 1076984,
+							"rsrp": -84,
+							"rsrq": -10,
+							"rssi": -72,
+							"sinr": 28
+						},
+						"generic": {
+							"apn": "FBB.HOME",
+							"hasIPv6": true,
+							"registration": "registered",
+							"roaming": false
+						}
+					}
+				}`,
+				check: func(t *testing.T, result *SignalResult) {
+					t.Helper()
+					require.NotNil(t, result.FourG)
+					assert.Equal(t, []string{"b2"}, result.FourG.Bands)
+					assert.InEpsilon(t, 4.0, result.FourG.Bars, 0.001)
+					assert.Equal(t, 12, result.FourG.CID)
+					assert.Equal(t, 310463, result.FourG.ENBID)
+					assert.Equal(t, -95, result.FourG.RSRP)
+					assert.Equal(t, -8, result.FourG.RSRQ)
+					assert.Equal(t, -85, result.FourG.RSSI)
+					assert.Equal(t, 15, result.FourG.SINR)
+
+					require.NotNil(t, result.FiveG)
+					assert.Equal(t, "Internal_directional", result.FiveG.AntennaUsed)
+					assert.Equal(t, []string{"n41"}, result.FiveG.Bands)
+					assert.InEpsilon(t, 5.0, result.FiveG.Bars, 0.001)
+					assert.Equal(t, 311, result.FiveG.CID)
+					assert.Equal(t, 1076984, result.FiveG.GNBID)
+					assert.Equal(t, -84, result.FiveG.RSRP)
+					assert.Equal(t, -10, result.FiveG.RSRQ)
+					assert.Equal(t, -72, result.FiveG.RSSI)
+					assert.Equal(t, 28, result.FiveG.SINR)
+
+					assert.Equal(t, "FBB.HOME", result.Generic.APN)
+					assert.True(t, result.Generic.HasIPv6)
+					assert.Equal(t, "registered", result.Generic.Registration)
+					assert.False(t, result.Generic.Roaming)
 				},
-				"5g": {
-					"antennaUsed": "Internal_directional",
-					"bands": ["n41"],
-					"bars": 5.0,
-					"cid": 311,
-					"gNBID": 1076984,
-					"rsrp": -84,
-					"rsrq": -10,
-					"rssi": -72,
-					"sinr": 28
+			},
+			{
+				name: "5g only",
+				body: `{
+					"signal": {
+						"5g": {
+							"antennaUsed": "",
+							"bands": ["n41"],
+							"bars": 5.0,
+							"cid": 311,
+							"gNBID": 1076984,
+							"rsrp": -84,
+							"rsrq": -10,
+							"rssi": -72,
+							"sinr": 28
+						},
+						"generic": {
+							"apn": "FBB.HOME",
+							"hasIPv6": true,
+							"registration": "registered",
+							"roaming": false
+						}
+					}
+				}`,
+				check: func(t *testing.T, result *SignalResult) {
+					t.Helper()
+					assert.Nil(t, result.FourG)
+					require.NotNil(t, result.FiveG)
+					assert.Equal(t, []string{"n41"}, result.FiveG.Bands)
+					assert.InEpsilon(t, 5.0, result.FiveG.Bars, 0.001)
 				},
-				"generic": {
-					"apn": "FBB.HOME",
-					"hasIPv6": true,
-					"registration": "registered",
-					"roaming": false
-				}
-			}
-		}`
-		//nolint:bodyclose // test mock
-		client := NewTestClient(jsonResponse(http.StatusOK, body), nil)
+			},
+			{
+				name: "4g only",
+				body: `{
+					"signal": {
+						"4g": {
+							"bands": ["b2"],
+							"bars": 4.0,
+							"cid": 12,
+							"eNBID": 310463,
+							"rsrp": -95,
+							"rsrq": -8,
+							"rssi": -85,
+							"sinr": 15
+						},
+						"generic": {
+							"apn": "FBB.HOME",
+							"hasIPv6": true,
+							"registration": "registered",
+							"roaming": false
+						}
+					}
+				}`,
+				check: func(t *testing.T, result *SignalResult) {
+					t.Helper()
+					require.NotNil(t, result.FourG)
+					assert.Equal(t, 310463, result.FourG.ENBID)
+					assert.Nil(t, result.FiveG)
+				},
+			},
+		}
 
-		gw := newArcadyan(
-			client,
-			&GatewayConfig{Username: testUsername, Password: testPassword},
-			"valid-token",
-			time.Now().Add(1*time.Hour),
-		)
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				//nolint:bodyclose // test mock
+				client := NewTestClient(jsonResponse(http.StatusOK, tc.body), nil)
+				gw := newArcadyan(
+					client,
+					&GatewayConfig{Username: testUsername, Password: testPassword},
+					"valid-token",
+					time.Now().Add(1*time.Hour),
+				)
 
-		result, err := gw.Signal()
-		require.NoError(t, err)
-		require.NotNil(t, result)
-
-		// Check 4G
-		require.NotNil(t, result.FourG)
-		assert.Equal(t, []string{"b2"}, result.FourG.Bands)
-		assert.InEpsilon(t, 4.0, result.FourG.Bars, 0.001)
-		assert.Equal(t, 12, result.FourG.CID)
-		assert.Equal(t, 310463, result.FourG.ENBID)
-		assert.Equal(t, -95, result.FourG.RSRP)
-		assert.Equal(t, -8, result.FourG.RSRQ)
-		assert.Equal(t, -85, result.FourG.RSSI)
-		assert.Equal(t, 15, result.FourG.SINR)
-
-		// Check 5G
-		require.NotNil(t, result.FiveG)
-		assert.Equal(t, "Internal_directional", result.FiveG.AntennaUsed)
-		assert.Equal(t, []string{"n41"}, result.FiveG.Bands)
-		assert.InEpsilon(t, 5.0, result.FiveG.Bars, 0.001)
-		assert.Equal(t, 311, result.FiveG.CID)
-		assert.Equal(t, 1076984, result.FiveG.GNBID)
-		assert.Equal(t, -84, result.FiveG.RSRP)
-		assert.Equal(t, -10, result.FiveG.RSRQ)
-		assert.Equal(t, -72, result.FiveG.RSSI)
-		assert.Equal(t, 28, result.FiveG.SINR)
-
-		// Check generic
-		assert.Equal(t, "FBB.HOME", result.Generic.APN)
-		assert.True(t, result.Generic.HasIPv6)
-		assert.Equal(t, "registered", result.Generic.Registration)
-		assert.False(t, result.Generic.Roaming)
+				result, err := gw.Signal()
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				tc.check(t, result)
+			})
+		}
 	})
 
-	t.Run("successful signal retrieval 5g only", func(t *testing.T) {
-		body := `{
-			"signal": {
-				"5g": {
-					"antennaUsed": "",
-					"bands": ["n41"],
-					"bars": 5.0,
-					"cid": 311,
-					"gNBID": 1076984,
-					"rsrp": -84,
-					"rsrq": -10,
-					"rssi": -72,
-					"sinr": 28
-				},
-				"generic": {
-					"apn": "FBB.HOME",
-					"hasIPv6": true,
-					"registration": "registered",
-					"roaming": false
-				}
-			}
-		}`
+	t.Run("signal errors", func(t *testing.T) {
 		//nolint:bodyclose // test mock
-		client := NewTestClient(jsonResponse(http.StatusOK, body), nil)
+		serverErrorResp := jsonResponse(http.StatusInternalServerError, "{}")
 
-		gw := newArcadyan(
-			client,
-			&GatewayConfig{Username: testUsername, Password: testPassword},
-			"valid-token",
-			time.Now().Add(1*time.Hour),
-		)
+		cases := []struct {
+			name          string
+			response      *http.Response
+			err           error
+			errorContains string
+		}{
+			{
+				name:          "with network error",
+				response:      nil,
+				err:           errors.New("network error"),
+				errorContains: "failed to get signal info",
+			},
+			{
+				name:          "with non-200 status",
+				response:      serverErrorResp,
+				err:           nil,
+				errorContains: "signal failed",
+			},
+		}
 
-		result, err := gw.Signal()
-		require.NoError(t, err)
-		assert.Nil(t, result.FourG)
-		require.NotNil(t, result.FiveG)
-		assert.Equal(t, []string{"n41"}, result.FiveG.Bands)
-		assert.InEpsilon(t, 5.0, result.FiveG.Bars, 0.001)
-	})
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				client := NewTestClient(tc.response, tc.err)
+				gw := newArcadyan(
+					client,
+					&GatewayConfig{Username: testUsername, Password: testPassword},
+					"valid-token",
+					time.Now().Add(1*time.Hour),
+				)
 
-	t.Run("successful signal retrieval 4g only", func(t *testing.T) {
-		body := `{
-			"signal": {
-				"4g": {
-					"bands": ["b2"],
-					"bars": 4.0,
-					"cid": 12,
-					"eNBID": 310463,
-					"rsrp": -95,
-					"rsrq": -8,
-					"rssi": -85,
-					"sinr": 15
-				},
-				"generic": {
-					"apn": "FBB.HOME",
-					"hasIPv6": true,
-					"registration": "registered",
-					"roaming": false
-				}
-			}
-		}`
-		//nolint:bodyclose // test mock
-		client := NewTestClient(jsonResponse(http.StatusOK, body), nil)
-
-		gw := newArcadyan(
-			client,
-			&GatewayConfig{Username: testUsername, Password: testPassword},
-			"valid-token",
-			time.Now().Add(1*time.Hour),
-		)
-
-		result, err := gw.Signal()
-		require.NoError(t, err)
-		require.NotNil(t, result.FourG)
-		assert.Equal(t, 310463, result.FourG.ENBID)
-		assert.Nil(t, result.FiveG)
-	})
-
-	t.Run("signal with network error", func(t *testing.T) {
-		client := NewTestClient(nil, errors.New("network error"))
-
-		gw := newArcadyan(
-			client,
-			&GatewayConfig{Username: testUsername, Password: testPassword},
-			"valid-token",
-			time.Now().Add(1*time.Hour),
-		)
-
-		_, err := gw.Signal()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get signal info")
-	})
-
-	t.Run("signal with non-200 status", func(t *testing.T) {
-		//nolint:bodyclose // test mock
-		client := NewTestClient(jsonResponse(http.StatusInternalServerError, "{}"), nil)
-
-		gw := newArcadyan(
-			client,
-			&GatewayConfig{Username: testUsername, Password: testPassword},
-			"valid-token",
-			time.Now().Add(1*time.Hour),
-		)
-
-		_, err := gw.Signal()
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "signal failed")
+				_, err := gw.Signal()
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.errorContains)
+			})
+		}
 	})
 }
 

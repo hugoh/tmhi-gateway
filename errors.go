@@ -15,8 +15,6 @@ var (
 	ErrRebootFailed = errors.New("reboot failed")
 	// ErrSignalFailed indicates a signal operation failed.
 	ErrSignalFailed = errors.New("signal failed")
-	// ErrNoResponse indicates no response available from mock.
-	ErrNoResponse = errors.New("no response available")
 )
 
 // AuthenticationError represents an authentication failure with the gateway.

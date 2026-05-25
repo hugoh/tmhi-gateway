@@ -7,46 +7,39 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 )
 
-type mockRoundTripper struct {
-	resp *http.Response
-	err  error
+const testBaseURL = "http://192.168.1.1"
+
+func newMockedClient(t *testing.T) *resty.Client {
+	t.Helper()
+
+	client := resty.New()
+	client.SetBaseURL(testBaseURL)
+	httpmock.ActivateNonDefault(client.GetClient())
+	t.Cleanup(httpmock.DeactivateAndReset)
+
+	return client
 }
 
-type multiMockRoundTripper struct {
-	responses []*http.Response
-	errors    []error
-	callCount int
-}
+func jsonResponder(status int, body string) httpmock.Responder {
+	return func(_ *http.Request) (*http.Response, error) {
+		resp := httpmock.NewStringResponse(status, body)
+		resp.Header.Set("Content-Type", "application/json")
 
-func (m *mockRoundTripper) RoundTrip(_ *http.Request) (*http.Response, error) {
-	return m.resp, m.err
-}
-
-func (m *multiMockRoundTripper) RoundTrip(_ *http.Request) (*http.Response, error) {
-	if m.callCount < len(m.responses) {
-		resp := m.responses[m.callCount]
-		err := m.errors[m.callCount]
-		m.callCount++
-
-		return resp, err
+		return resp, nil
 	}
-
-	return nil, ErrNoResponse
 }
 
-func NewTestClient(resp *http.Response, err error) *resty.Client {
-	return resty.NewWithClient(&http.Client{
-		Transport: &mockRoundTripper{resp: resp, err: err},
-	})
-}
+func textResponder(status int, body string) httpmock.Responder {
+	return func(_ *http.Request) (*http.Response, error) {
+		resp := httpmock.NewStringResponse(status, body)
+		resp.Header.Set("Content-Type", "text/plain")
 
-func NewMultiTestClient(responses []*http.Response, errors []error) *resty.Client {
-	return resty.NewWithClient(&http.Client{
-		Transport: &multiMockRoundTripper{responses: responses, errors: errors},
-	})
+		return resp, nil
+	}
 }
 
 func TestNewGatewayCommon(t *testing.T) {
@@ -59,7 +52,7 @@ func TestNewGatewayCommon(t *testing.T) {
 	gc := NewGatewayCommon(cfg)
 
 	assert.NotNil(t, gc.client)
-	assert.Equal(t, "http://192.168.1.1", gc.client.BaseURL)
+	assert.Equal(t, testBaseURL, gc.client.BaseURL)
 	assert.Equal(t, cfg.Timeout, gc.client.GetClient().Timeout)
 	assert.Equal(t, cfg.Retries, gc.client.RetryCount)
 	assert.True(t, gc.client.Debug)
@@ -69,38 +62,31 @@ func TestNewGatewayCommon(t *testing.T) {
 func TestCheckWebInterface(t *testing.T) {
 	cases := []struct {
 		name           string
-		resp           *http.Response
+		status         int
 		err            error
 		wantUp         bool
 		wantStatusCode int
 	}{
 		{
 			name:           "successful web interface check",
-			resp:           &http.Response{StatusCode: http.StatusOK, Body: http.NoBody},
-			err:            nil,
+			status:         http.StatusOK,
 			wantUp:         true,
 			wantStatusCode: http.StatusOK,
 		},
 		{
-			name: "failed web interface status code",
-			resp: &http.Response{
-				StatusCode: http.StatusInternalServerError,
-				Body:       http.NoBody,
-			},
-			err:            nil,
+			name:           "failed web interface status code",
+			status:         http.StatusInternalServerError,
 			wantUp:         false,
 			wantStatusCode: http.StatusInternalServerError,
 		},
 		{
 			name:           "not found web interface",
-			resp:           &http.Response{StatusCode: http.StatusNotFound, Body: http.NoBody},
-			err:            nil,
+			status:         http.StatusNotFound,
 			wantUp:         false,
 			wantStatusCode: http.StatusNotFound,
 		},
 		{
 			name:           "failed web interface check",
-			resp:           nil,
 			err:            errors.New("connection refused"),
 			wantUp:         false,
 			wantStatusCode: 0,
@@ -109,7 +95,16 @@ func TestCheckWebInterface(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := NewTestClient(tc.resp, tc.err)
+			client := newMockedClient(t)
+
+			if tc.err != nil {
+				httpmock.RegisterResponder("HEAD", testBaseURL+"/",
+					httpmock.NewErrorResponder(tc.err))
+			} else {
+				httpmock.RegisterResponder("HEAD", testBaseURL+"/",
+					httpmock.NewStringResponder(tc.status, ""))
+			}
+
 			gc := &GatewayCommon{client: client, config: &GatewayConfig{}}
 
 			result := gc.CheckWebInterface()

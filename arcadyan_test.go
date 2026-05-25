@@ -1,39 +1,16 @@
 package tmhi
 
 import (
-	"bytes"
 	"errors"
-	"io"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-const (
-	textContentType = "text/plain"
-)
-
-func strBody(s string) io.ReadCloser { return io.NopCloser(bytes.NewBufferString(s)) }
-
-func jsonResponse(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode: status,
-		Header:     http.Header{contentType: []string{jsonContentType}},
-		Body:       strBody(body),
-	}
-}
-
-func textResponse(status int, body string) *http.Response {
-	return &http.Response{
-		StatusCode: status,
-		Header:     http.Header{contentType: []string{textContentType}},
-		Body:       strBody(body),
-	}
-}
 
 func newArcadyan(
 	client *resty.Client,
@@ -60,8 +37,11 @@ func newArcadyan(
 }
 
 func TestArcadyanGateway_Login_Success(t *testing.T) {
+	client := newMockedClient(t)
 	body := `{"auth":{"expiration":1234567890,"refreshCountLeft":5,"refreshCountMax":10,"token":"testtoken"}}`
-	client := NewTestClient(jsonResponse(http.StatusOK, body), nil) //nolint:bodyclose // test mock
+
+	httpmock.RegisterResponder("POST", testBaseURL+"/TMI/v1/auth/login",
+		jsonResponder(http.StatusOK, body))
 
 	gw := newArcadyan(
 		client,
@@ -79,8 +59,10 @@ func TestArcadyanGateway_Login_Success(t *testing.T) {
 }
 
 func TestArcadyanGateway_Reboot_Failure(t *testing.T) {
-	//nolint:bodyclose // test mock
-	client := NewTestClient(textResponse(http.StatusInternalServerError, "server error"), nil)
+	client := newMockedClient(t)
+
+	httpmock.RegisterResponder("POST", testBaseURL+"/TMI/v1/gateway/reset?set=reboot",
+		textResponder(http.StatusInternalServerError, "server error"))
 
 	gw := newArcadyan(
 		client,
@@ -108,8 +90,10 @@ func TestArcadyanGateway_Reboot_DryRun(t *testing.T) {
 }
 
 func TestArcadyanGateway_Reboot_Success(t *testing.T) {
-	//nolint:bodyclose // test mock
-	client := NewTestClient(textResponse(http.StatusOK, "reboot initiated"), nil)
+	client := newMockedClient(t)
+
+	httpmock.RegisterResponder("POST", testBaseURL+"/TMI/v1/gateway/reset?set=reboot",
+		textResponder(http.StatusOK, "reboot initiated"))
 
 	gw := newArcadyan(
 		client,
@@ -123,42 +107,45 @@ func TestArcadyanGateway_Reboot_Success(t *testing.T) {
 }
 
 func TestArcadyanGateway_Login_Errors(t *testing.T) {
-	//nolint:bodyclose // test mock
-	unauthorizedResp := textResponse(http.StatusUnauthorized, "unauthorized")
-	//nolint:bodyclose // test mock
-	invalidJSONResp := jsonResponse(http.StatusOK, "{invalid json")
-
 	cases := []struct {
 		name          string
-		response      *http.Response
-		err           error
+		setupMock     func()
 		errorContains []string
 		errorIs       error
 	}{
 		{
-			name:          "non-200 status",
-			response:      unauthorizedResp,
-			err:           nil,
+			name: "non-200 status",
+			setupMock: func() {
+				httpmock.RegisterResponder("POST", testBaseURL+"/TMI/v1/auth/login",
+					textResponder(http.StatusUnauthorized, "unauthorized"))
+			},
 			errorContains: []string{"authentication failed", "401"},
 			errorIs:       ErrAuthentication,
 		},
 		{
-			name:          "invalid JSON",
-			response:      invalidJSONResp,
-			err:           nil,
+			name: "invalid JSON",
+			setupMock: func() {
+				httpmock.RegisterResponder("POST", testBaseURL+"/TMI/v1/auth/login",
+					jsonResponder(http.StatusOK, "{invalid json"))
+			},
 			errorContains: []string{"failed to decode login response"},
 		},
 		{
-			name:          "HTTP client error",
-			response:      nil,
-			err:           errors.New("network error"),
+			name: "HTTP client error",
+			setupMock: func() {
+				httpmock.RegisterResponder("POST", testBaseURL+"/TMI/v1/auth/login",
+					httpmock.NewErrorResponder(errors.New("network error")))
+			},
 			errorContains: []string{"login request failed"},
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := NewTestClient(tc.response, tc.err)
+			client := newMockedClient(t)
+
+			tc.setupMock()
+
 			gw := newArcadyan(
 				client,
 				&GatewayConfig{Username: testUsername, Password: testPassword},
@@ -181,8 +168,10 @@ func TestArcadyanGateway_Login_Errors(t *testing.T) {
 }
 
 func TestArcadyanGateway_Info_Success(t *testing.T) {
-	//nolint:bodyclose // test mock
-	client := NewTestClient(jsonResponse(http.StatusOK, `{"system": {"model": "TEST123"}}`), nil)
+	client := newMockedClient(t)
+
+	httpmock.RegisterResponder("GET", testBaseURL+InfoURL,
+		jsonResponder(http.StatusOK, `{"system": {"model": "TEST123"}}`))
 
 	gw := newArcadyan(
 		client,
@@ -236,11 +225,12 @@ func TestNewArcadyanGateway(t *testing.T) {
 
 func TestArcadyanGateway_Status(t *testing.T) {
 	t.Run("successful status with registration info", func(t *testing.T) {
-		headResp := &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}
-		infoBody := `{"signal":{"generic":{"registration":"registered"}}}`
-		//nolint:bodyclose // test mock
-		infoResp := jsonResponse(http.StatusOK, infoBody)
-		client := NewMultiTestClient([]*http.Response{headResp, infoResp}, []error{nil, nil})
+		client := newMockedClient(t)
+
+		httpmock.RegisterResponder("HEAD", testBaseURL+"/",
+			httpmock.NewStringResponder(http.StatusOK, ""))
+		httpmock.RegisterResponder("GET", testBaseURL+InfoURL,
+			jsonResponder(http.StatusOK, `{"signal":{"generic":{"registration":"registered"}}}`))
 
 		gw := newArcadyan(
 			client,
@@ -256,8 +246,12 @@ func TestArcadyanGateway_Status(t *testing.T) {
 	})
 
 	t.Run("status with network error returns unknown", func(t *testing.T) {
-		headResp := &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}
-		client := NewMultiTestClient([]*http.Response{headResp}, []error{nil})
+		client := newMockedClient(t)
+
+		httpmock.RegisterResponder("HEAD", testBaseURL+"/",
+			httpmock.NewStringResponder(http.StatusOK, ""))
+		httpmock.RegisterResponder("GET", testBaseURL+InfoURL,
+			httpmock.NewErrorResponder(errors.New("connection refused")))
 
 		gw := newArcadyan(
 			client,
@@ -275,8 +269,10 @@ func TestArcadyanGateway_Status(t *testing.T) {
 
 func TestArcadyanGateway_Request_Methods(t *testing.T) {
 	t.Run("GET request", func(t *testing.T) {
-		//nolint:bodyclose // test mock
-		client := NewTestClient(jsonResponse(http.StatusOK, `{"status": "ok"}`), nil)
+		client := newMockedClient(t)
+
+		httpmock.RegisterResponder("GET", testBaseURL+"/test",
+			jsonResponder(http.StatusOK, `{"status": "ok"}`))
 
 		gw := newArcadyan(client, &GatewayConfig{}, "valid-token", time.Now().Add(1*time.Hour))
 
@@ -287,8 +283,10 @@ func TestArcadyanGateway_Request_Methods(t *testing.T) {
 	})
 
 	t.Run("POST request", func(t *testing.T) {
-		//nolint:bodyclose // test mock
-		client := NewTestClient(jsonResponse(http.StatusOK, `{"status": "created"}`), nil)
+		client := newMockedClient(t)
+
+		httpmock.RegisterResponder("POST", testBaseURL+"/test",
+			jsonResponder(http.StatusOK, `{"status": "created"}`))
 
 		gw := newArcadyan(
 			client,
@@ -303,8 +301,10 @@ func TestArcadyanGateway_Request_Methods(t *testing.T) {
 	})
 
 	t.Run("non-JSON response", func(t *testing.T) {
-		//nolint:bodyclose // test mock
-		client := NewTestClient(textResponse(http.StatusOK, "plain text response"), nil)
+		client := newMockedClient(t)
+
+		httpmock.RegisterResponder("GET", testBaseURL+"/test",
+			textResponder(http.StatusOK, "plain text response"))
 
 		gw := newArcadyan(client, &GatewayConfig{}, "valid-token", time.Now().Add(1*time.Hour))
 
@@ -314,8 +314,10 @@ func TestArcadyanGateway_Request_Methods(t *testing.T) {
 	})
 
 	t.Run("empty response", func(t *testing.T) {
-		//nolint:bodyclose // test mock
-		client := NewTestClient(textResponse(http.StatusNoContent, ""), nil)
+		client := newMockedClient(t)
+
+		httpmock.RegisterResponder("GET", testBaseURL+"/test",
+			textResponder(http.StatusNoContent, ""))
 
 		gw := newArcadyan(client, &GatewayConfig{}, "valid-token", time.Now().Add(1*time.Hour))
 
@@ -458,8 +460,11 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
-				//nolint:bodyclose // test mock
-				client := NewTestClient(jsonResponse(http.StatusOK, tc.body), nil)
+				client := newMockedClient(t)
+
+				httpmock.RegisterResponder("GET", testBaseURL+InfoURL,
+					jsonResponder(http.StatusOK, tc.body))
+
 				gw := newArcadyan(
 					client,
 					&GatewayConfig{Username: testUsername, Password: testPassword},
@@ -476,32 +481,35 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 	})
 
 	t.Run("signal errors", func(t *testing.T) {
-		//nolint:bodyclose // test mock
-		serverErrorResp := jsonResponse(http.StatusInternalServerError, "{}")
-
 		cases := []struct {
 			name          string
-			response      *http.Response
-			err           error
+			setupMock     func()
 			errorContains string
 		}{
 			{
-				name:          "with network error",
-				response:      nil,
-				err:           errors.New("network error"),
+				name: "with network error",
+				setupMock: func() {
+					httpmock.RegisterResponder("GET", testBaseURL+InfoURL,
+						httpmock.NewErrorResponder(errors.New("network error")))
+				},
 				errorContains: "failed to get signal info",
 			},
 			{
-				name:          "with non-200 status",
-				response:      serverErrorResp,
-				err:           nil,
+				name: "with non-200 status",
+				setupMock: func() {
+					httpmock.RegisterResponder("GET", testBaseURL+InfoURL,
+						jsonResponder(http.StatusInternalServerError, "{}"))
+				},
 				errorContains: "signal failed",
 			},
 		}
 
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
-				client := NewTestClient(tc.response, tc.err)
+				client := newMockedClient(t)
+
+				tc.setupMock()
+
 				gw := newArcadyan(
 					client,
 					&GatewayConfig{Username: testUsername, Password: testPassword},

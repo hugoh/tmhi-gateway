@@ -134,3 +134,9 @@ jobs:
           echo "Pushing ${TAG}"
           git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}"
           git push origin "${TAG}"
+      - name: Create GitHub Release
+        if: steps.validate.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.validate.outputs.tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$TAG" --verify-tag --generate-notes

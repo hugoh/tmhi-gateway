@@ -1,4 +1,4 @@
-// Package tmhi provides gateway implementations for T-Mobile Home Internet devices.
+// Package tmhi provides gateway communication for TMHI modems.
 package tmhi
 
 import (
@@ -8,10 +8,9 @@ import (
 	"time"
 )
 
-// InfoURL is the endpoint for gateway information.
+// infoURL is the endpoint for gateway information.
 const (
-	InfoURL         = "/TMI/v1/gateway/?get=all"
-	contentType     = "Content-Type"
+	infoURL         = "/TMI/v1/gateway/?get=all"
 	jsonContentType = "application/json"
 )
 
@@ -36,9 +35,9 @@ func NewArcadyanGateway(cfg *GatewayConfig) *ArcadyanGateway {
 }
 
 // Login authenticates with the Arcadyan gateway.
-func (a *ArcadyanGateway) Login() (*LoginResult, error) {
+func (a *ArcadyanGateway) Login() error {
 	if a.isLoggedIn() {
-		return &LoginResult{Success: true, Token: a.credentials.Token}, nil
+		return nil
 	}
 
 	bodyMap := map[string]string{
@@ -57,20 +56,17 @@ func (a *ArcadyanGateway) Login() (*LoginResult, error) {
 		}
 	}
 
-	resp, err := a.client.R().
-		SetBody(bodyMap).
-		SetResult(&loginResp).
-		Post(reqPath)
+	resp, err := a.client.R().SetResult(&loginResp).SetBody(bodyMap).Post(reqPath)
 	if err != nil {
-		return nil, fmt.Errorf("login request failed: failed to decode login response: %w", err)
+		return fmt.Errorf("login request failed: failed to decode login response: %w", err)
 	}
 
 	if resp.IsError() {
-		return nil, NewAuthError(resp.StatusCode(), resp.String())
+		return NewAuthError(resp.StatusCode(), resp.String())
 	}
 
 	if loginResp.Auth.Token == "" {
-		return nil, NewAuthError(0, "login response missing auth token")
+		return NewAuthError(0, "login response missing auth token")
 	}
 
 	a.credentials = arcadianLoginData{
@@ -79,16 +75,12 @@ func (a *ArcadyanGateway) Login() (*LoginResult, error) {
 	}
 	a.client.SetAuthToken(a.credentials.Token)
 
-	return &LoginResult{
-		Success:    true,
-		Token:      loginResp.Auth.Token,
-		Expiration: loginResp.Auth.Expiration,
-	}, nil
+	return nil
 }
 
 // Reboot restarts the Arcadyan gateway.
 func (a *ArcadyanGateway) Reboot() error {
-	_, err := a.Login()
+	err := a.Login()
 	if err != nil {
 		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
 	}
@@ -104,7 +96,7 @@ func (a *ArcadyanGateway) Reboot() error {
 		return fmt.Errorf("reboot request failed: %w", err)
 	}
 
-	if !resp.IsSuccess() {
+	if resp.IsError() {
 		return NewGatewayError("reboot", resp.StatusCode(), resp.String(), ErrRebootFailed)
 	}
 
@@ -113,7 +105,7 @@ func (a *ArcadyanGateway) Reboot() error {
 
 // Info retrieves gateway information.
 func (a *ArcadyanGateway) Info() (*InfoResult, error) {
-	return a.Request("GET", InfoURL)
+	return a.Request("GET", infoURL)
 }
 
 // Request makes an HTTP request to the gateway.
@@ -123,18 +115,19 @@ func (a *ArcadyanGateway) Request(method, path string) (*InfoResult, error) {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	contentType := resp.Header().Get(contentType)
+	contentType := resp.Header().Get("Content-Type")
+	body := resp.Body()
 
 	var data map[string]any
 	if strings.HasPrefix(contentType, jsonContentType) {
-		if err := json.Unmarshal(resp.Body(), &data); err != nil {
+		if err := json.Unmarshal(body, &data); err != nil {
 			return nil, fmt.Errorf("json unmarshal failed: %w", err)
 		}
 	}
 
 	return &InfoResult{
 		Data:        data,
-		Raw:         resp.Body(),
+		Raw:         body,
 		ContentType: contentType,
 		StatusCode:  resp.StatusCode(),
 	}, nil
@@ -152,7 +145,7 @@ func (a *ArcadyanGateway) Status() (*StatusResult, error) {
 		}
 	}
 
-	info, err := a.client.R().SetResult(&result).Get(InfoURL)
+	resp, err := a.client.R().SetResult(&result).Get(infoURL)
 	if err != nil {
 		return &StatusResult{
 			WebInterfaceUp: webResult.WebInterfaceUp,
@@ -162,22 +155,19 @@ func (a *ArcadyanGateway) Status() (*StatusResult, error) {
 	}
 
 	regStatus := "unknown"
-	if info.IsSuccess() {
+	if resp.IsSuccess() {
 		regStatus = result.Signal.Generic.Registration
 	}
 
 	webResult.Registration = regStatus
-	if !info.IsSuccess() {
+
+	if resp.IsError() {
 		webResult.Error = NewGatewayError(
 			"status",
-			info.StatusCode(),
+			resp.StatusCode(),
 			ErrSignalFailed.Error(),
 			ErrSignalFailed,
 		)
-	}
-
-	if info.RawResponse != nil && info.RawResponse.Body != nil {
-		_ = info.RawResponse.Body.Close()
 	}
 
 	return webResult, nil
@@ -186,25 +176,21 @@ func (a *ArcadyanGateway) Status() (*StatusResult, error) {
 // Signal retrieves signal strength information.
 func (a *ArcadyanGateway) Signal() (*SignalResult, error) {
 	var result struct {
-		Signal signalResult `json:"signal"`
+		Signal signalResult
 	}
 
-	info, err := a.client.R().SetResult(&result).Get(InfoURL)
+	resp, err := a.client.R().SetResult(&result).Get(infoURL)
 	if err != nil {
 		return nil, NewGatewayError("signal", 0, "failed to get signal info", err)
 	}
 
-	if !info.IsSuccess() {
+	if resp.IsError() {
 		return nil, NewGatewayError(
 			"signal",
-			info.StatusCode(),
+			resp.StatusCode(),
 			ErrSignalFailed.Error(),
 			ErrSignalFailed,
 		)
-	}
-
-	if info.RawResponse != nil && info.RawResponse.Body != nil {
-		_ = info.RawResponse.Body.Close()
 	}
 
 	return convertSignalResult(result.Signal), nil
@@ -214,34 +200,34 @@ type signalResult struct {
 	FourG   *fourGSignal `json:"4g"`
 	FiveG   *fiveGSignal `json:"5g"`
 	Generic struct {
-		APN          string `json:"apn"`
-		HasIPv6      bool   `json:"hasIPv6"`
-		Registration string `json:"registration"`
-		Roaming      bool   `json:"roaming"`
-	} `json:"generic"`
+		APN          string
+		HasIPv6      bool
+		Registration string
+		Roaming      bool
+	}
 }
 
 type fourGSignal struct {
 	signalData
 
-	ENBID int `json:"eNBID"` //nolint:tagliatelle
+	ENBID int
 }
 
 type fiveGSignal struct {
 	signalData
 
-	AntennaUsed string `json:"antennaUsed"`
-	GNBID       int    `json:"gNBID"` //nolint:tagliatelle
+	AntennaUsed string
+	GNBID       int
 }
 
 type signalData struct {
-	Bands []string `json:"bands"`
-	Bars  float64  `json:"bars"`
-	CID   int      `json:"cid"`
-	RSRP  int      `json:"rsrp"`
-	RSRQ  int      `json:"rsrq"`
-	RSSI  int      `json:"rssi"`
-	SINR  int      `json:"sinr"`
+	Bands []string
+	Bars  float64
+	CID   int
+	RSRP  int
+	RSRQ  int
+	RSSI  int
+	SINR  int
 }
 
 func convertSignalResult(sig signalResult) *SignalResult {

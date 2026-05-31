@@ -5,21 +5,23 @@ import (
 	"strings"
 )
 
+const nonceParam = "nonce"
+
 type nonceResp struct {
-	Nonce     string `json:"nonce"`
-	Pubkey    string `json:"pubkey"`
-	RandomKey string `json:"randomKey"`
+	Nonce     string
+	Pubkey    string
+	RandomKey string
 }
 
 type nokiaLoginData struct {
 	SID       string
-	CSRFToken string
+	csrfToken string
 }
 
 type nokiaLoginResp struct {
-	Success   int    `json:"success"`
-	Reason    int    `json:"reason"`
-	Sid       string `json:"sid"`
+	Success   int
+	Reason    int
+	Sid       string
 	CsrfToken string `json:"token"`
 }
 
@@ -35,54 +37,48 @@ func NewNokiaGateway(cfg *GatewayConfig) *NokiaGateway {
 	return &NokiaGateway{GatewayCommon: NewGatewayCommon(cfg)}
 }
 
-func (l *nokiaLoginResp) success() bool {
+func (l *nokiaLoginResp) hasCredentials() bool {
 	return l.Sid != "" && l.CsrfToken != ""
 }
 
 // Login authenticates with the Nokia gateway.
-func (n *NokiaGateway) Login() (*LoginResult, error) {
+func (n *NokiaGateway) Login() error {
 	if n.isLoggedIn() {
-		return &LoginResult{Success: true}, nil
+		return nil
 	}
 
 	nonceResp, nonceErr := n.getNonce()
 	if nonceErr != nil {
-		return nil, fmt.Errorf("error getting nonce: %w", nonceErr)
+		return fmt.Errorf("error getting nonce: %w", nonceErr)
 	}
 
 	loginResp, loginErr := n.getCredentials(*nonceResp)
 	if loginErr != nil {
-		return nil, fmt.Errorf("login failed: %w", loginErr)
+		return fmt.Errorf("login failed: %w", loginErr)
 	}
 
 	n.credentials.SID = loginResp.Sid
-	n.credentials.CSRFToken = loginResp.CsrfToken
+	n.credentials.csrfToken = loginResp.CsrfToken
 	n.client.SetHeader("Cookie", "sid="+n.credentials.SID)
 
-	return &LoginResult{
-		Success:   true,
-		SessionID: loginResp.Sid,
-		CSRFToken: loginResp.CsrfToken,
-	}, nil
+	return nil
 }
 
 // Reboot restarts the Nokia gateway.
 func (n *NokiaGateway) Reboot() error {
-	if _, err := n.Login(); err != nil {
+	if err := n.Login(); err != nil {
 		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
 	}
 
 	formData := map[string]string{
-		"csrf_token": n.credentials.CSRFToken,
+		"csrf_token": n.credentials.csrfToken,
 	}
 
 	if n.config.DryRun {
 		return nil
 	}
 
-	req := n.client.R().SetFormData(formData)
-
-	resp, err := req.Execute("POST", "/reboot_web_app.cgi")
+	resp, err := n.client.R().SetFormData(formData).Post("/reboot_web_app.cgi")
 	if err != nil {
 		return fmt.Errorf("error sending reboot request: %w", err)
 	}
@@ -115,30 +111,27 @@ func (*NokiaGateway) Signal() (*SignalResult, error) {
 }
 
 func (n *NokiaGateway) isLoggedIn() bool {
-	return n.credentials.SID != "" && n.credentials.CSRFToken != ""
+	return n.credentials.SID != "" && n.credentials.csrfToken != ""
 }
 
 func (n *NokiaGateway) getCredentials(nonceResp nonceResp) (*nokiaLoginResp, error) {
 	passHashInput := strings.ToLower(n.config.Password)
-	userPassHash := Sha256Hash(n.config.Username, passHashInput)
-	userPassNonceHash := Sha256Url(userPassHash, nonceResp.Nonce)
+	userPassHash := sha256Hash(n.config.Username, passHashInput)
+	userPassNonceHash := sha256URL(userPassHash, nonceResp.Nonce)
 	reqParams := map[string]string{
-		"userhash":      Sha256Url(n.config.Username, nonceResp.Nonce),
-		"RandomKeyhash": Sha256Url(nonceResp.RandomKey, nonceResp.Nonce),
+		"userhash":      sha256URL(n.config.Username, nonceResp.Nonce),
+		"RandomKeyhash": sha256URL(nonceResp.RandomKey, nonceResp.Nonce),
 		"response":      userPassNonceHash,
-		"nonce":         Base64urlEscape(nonceResp.Nonce),
-		"enckey":        Random16bytes(),
-		"enciv":         Random16bytes(),
+		nonceParam:      base64urlEscape(nonceResp.Nonce),
+		"enckey":        random16bytes(),
+		"enciv":         random16bytes(),
 	}
 
 	reqURL := "/login_web_app.cgi"
 
 	var loginResp nokiaLoginResp
 
-	resp, err := n.client.R().
-		SetFormData(reqParams).
-		SetResult(&loginResp).
-		Post(reqURL)
+	resp, err := n.client.R().SetResult(&loginResp).SetFormData(reqParams).Post(reqURL)
 	if err != nil {
 		return nil, NewAuthError(0, err.Error())
 	}
@@ -148,7 +141,7 @@ func (n *NokiaGateway) getCredentials(nonceResp nonceResp) (*nokiaLoginResp, err
 	}
 
 	var authErr error
-	if loginResp.success() {
+	if loginResp.hasCredentials() {
 		authErr = nil
 	} else {
 		authErr = NewAuthError(0, "no valid credentials returned")
@@ -158,14 +151,12 @@ func (n *NokiaGateway) getCredentials(nonceResp nonceResp) (*nokiaLoginResp, err
 }
 
 func (n *NokiaGateway) getNonce() (*nonceResp, error) {
-	var resp nonceResp
+	var result nonceResp
 
-	_, err := n.client.R().
-		SetResult(&resp).
-		Get("/login_web_app.cgi?nonce")
+	_, err := n.client.R().SetResult(&result).Get("/login_web_app.cgi?" + nonceParam)
 	if err != nil {
 		return nil, fmt.Errorf("error getting nonce: %w", err)
 	}
 
-	return &resp, nil
+	return &result, nil
 }

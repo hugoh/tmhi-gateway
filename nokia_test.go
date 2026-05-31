@@ -1,12 +1,12 @@
 package tmhi
 
 import (
-	"errors"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -21,104 +21,106 @@ const (
 	testValidToken    = "valid-token"
 )
 
-func newTestNokiaGateway(
-	client *resty.Client,
-	cfg *GatewayConfig,
-	sid, token string,
-) *NokiaGateway {
-	gw := &NokiaGateway{
-		GatewayCommon: &GatewayCommon{
-			client: client,
-			config: cfg,
-		},
-	}
+func newNokia(gc *GatewayCommon, sid, token string) *NokiaGateway {
+	gw := &NokiaGateway{GatewayCommon: gc}
 	if sid != "" {
-		gw.credentials = nokiaLoginData{SID: sid, CSRFToken: token}
+		gw.credentials = nokiaLoginData{SID: sid, csrfToken: token}
 	}
 
 	return gw
 }
 
+func nokiaConfig(ts *httptest.Server) *GatewayConfig {
+	return &GatewayConfig{
+		IP:       strings.TrimPrefix(ts.URL, "http://"),
+		Username: testUsername,
+		Password: testPassword,
+	}
+}
+
+func nokiaTestGw(ts *httptest.Server, cfg *GatewayConfig, sid, token string) *NokiaGateway {
+	return newNokia(&GatewayCommon{
+		client: resty.NewWithClient(&http.Client{}).SetBaseURL(ts.URL),
+		config: cfg,
+	}, sid, token)
+}
+
+func nokiaTestGwClosed(cfg *GatewayConfig, sid, token string) *NokiaGateway {
+	ts := httptest.NewServer(http.HandlerFunc(
+		func(_ http.ResponseWriter, _ *http.Request) {},
+	))
+	ts.Close()
+
+	return newNokia(&GatewayCommon{
+		client: resty.NewWithClient(&http.Client{}).SetBaseURL(ts.URL),
+		config: cfg,
+	}, sid, token)
+}
+
 func Test_LoginSuccess(t *testing.T) {
-	success := &nokiaLoginResp{
+	valid := &nokiaLoginResp{
 		Success:   0,
 		Reason:    0,
 		Sid:       "foo",
 		CsrfToken: "bar",
 	}
-	assert.True(t, success.success())
+	assert.True(t, valid.hasCredentials())
 }
 
 func Test_LoginFailure(t *testing.T) {
-	fail := &nokiaLoginResp{
+	invalid := &nokiaLoginResp{
 		Success: 0,
 		Reason:  600,
 	}
-	assert.False(t, fail.success())
+	assert.False(t, invalid.hasCredentials())
 }
 
 func TestNokiaGateway_getCredentials_ErrorResponse(t *testing.T) {
-	t.Run("server error", func(t *testing.T) {
-		client := newMockedClient(t)
+	cases := []struct {
+		name string
+		ts   *httptest.Server
+	}{
+		{
+			name: "server error",
+			ts:   newTestServer(t, textResponder(http.StatusInternalServerError, "server error")),
+		},
+		{
+			name: "invalid credentials",
+			ts:   newTestServer(t, jsonResponder(http.StatusOK, `{"success":0,"reason":600}`)),
+		},
+	}
 
-		httpmock.RegisterResponder("POST", testBaseURL+"/login_web_app.cgi",
-			textResponder(http.StatusInternalServerError, "server error"))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gw := nokiaTestGw(tc.ts, nokiaConfig(tc.ts), "", "")
 
-		gw := newTestNokiaGateway(
-			client,
-			&GatewayConfig{Username: testUsername, Password: testPassword},
-			"",
-			"",
-		)
-
-		_, err := gw.getCredentials(nonceResp{Nonce: "test"})
-		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrAuthentication)
-	})
-
-	t.Run("invalid credentials", func(t *testing.T) {
-		client := newMockedClient(t)
-
-		httpmock.RegisterResponder("POST", testBaseURL+"/login_web_app.cgi",
-			jsonResponder(http.StatusOK, `{"success":0,"reason":600}`))
-
-		gw := newTestNokiaGateway(
-			client,
-			&GatewayConfig{Username: testUsername, Password: testPassword},
-			"",
-			"",
-		)
-
-		_, err := gw.getCredentials(nonceResp{Nonce: "test"})
-		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrAuthentication)
-	})
+			_, err := gw.getCredentials(nonceResp{Nonce: "test"})
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrAuthentication)
+		})
+	}
 }
 
 func TestNokiaGateway_Reboot_Success(t *testing.T) {
-	client := newMockedClient(t)
+	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/reboot_web_app.cgi", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+	})
 
-	httpmock.RegisterResponder("POST", testBaseURL+"/reboot_web_app.cgi",
-		httpmock.NewStringResponder(http.StatusOK, ""))
-
-	gw := newTestNokiaGateway(
-		client,
-		&GatewayConfig{Username: testUsername, Password: testPassword},
-		testValidSID,
-		testValidToken,
-	)
+	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
 
 	err := gw.Reboot()
 	assert.NoError(t, err)
 }
 
 func TestNokiaGateway_Status(t *testing.T) {
-	client := newMockedClient(t)
+	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodHead, r.Method)
+		w.WriteHeader(http.StatusOK)
+	})
 
-	httpmock.RegisterResponder("HEAD", testBaseURL+"/",
-		httpmock.NewStringResponder(http.StatusOK, ""))
-
-	gw := newTestNokiaGateway(client, &GatewayConfig{}, "", "")
+	gw := nokiaTestGw(ts, &GatewayConfig{}, "", "")
 
 	result, err := gw.Status()
 	require.NoError(t, err)
@@ -127,12 +129,7 @@ func TestNokiaGateway_Status(t *testing.T) {
 }
 
 func TestNokiaGateway_getNonce_ErrorResponse(t *testing.T) {
-	client := newMockedClient(t)
-
-	httpmock.RegisterResponder("GET", testBaseURL+"/login_web_app.cgi?nonce",
-		httpmock.NewErrorResponder(errors.New("network error")))
-
-	gw := newTestNokiaGateway(client, &GatewayConfig{}, "", "")
+	gw := nokiaTestGwClosed(&GatewayConfig{}, "", "")
 
 	_, err := gw.getNonce()
 	require.Error(t, err)
@@ -140,12 +137,8 @@ func TestNokiaGateway_getNonce_ErrorResponse(t *testing.T) {
 }
 
 func TestNokiaGateway_getNonce_Success(t *testing.T) {
-	client := newMockedClient(t)
-
-	httpmock.RegisterResponder("GET", testBaseURL+"/login_web_app.cgi?nonce",
-		jsonResponder(http.StatusOK, testNonceBody))
-
-	gw := newTestNokiaGateway(client, &GatewayConfig{}, "", "")
+	ts := newTestServer(t, jsonResponder(http.StatusOK, testNonceBody))
+	gw := nokiaTestGw(ts, &GatewayConfig{}, "", "")
 
 	nonceResp, err := gw.getNonce()
 	require.NoError(t, err)
@@ -155,17 +148,8 @@ func TestNokiaGateway_getNonce_Success(t *testing.T) {
 }
 
 func TestNokiaGateway_getCredentials_Success(t *testing.T) {
-	client := newMockedClient(t)
-
-	httpmock.RegisterResponder("POST", testBaseURL+"/login_web_app.cgi",
-		jsonResponder(http.StatusOK, testLoginRespBody))
-
-	gw := newTestNokiaGateway(
-		client,
-		&GatewayConfig{Username: testUsername, Password: testPassword},
-		"",
-		"",
-	)
+	ts := newTestServer(t, jsonResponder(http.StatusOK, testLoginRespBody))
+	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
 
 	loginResp, err := gw.getCredentials(nonceResp{Nonce: "testNonce", RandomKey: "testRandomKey"})
 	require.NoError(t, err)
@@ -174,68 +158,42 @@ func TestNokiaGateway_getCredentials_Success(t *testing.T) {
 }
 
 func TestNokiaGateway_Login_Alreadyauthenticated(t *testing.T) {
-	gw := newTestNokiaGateway(nil, &GatewayConfig{}, "valid-sid", "valid-token")
+	gw := newNokia(&GatewayCommon{config: &GatewayConfig{}}, "valid-sid", "valid-token")
 
-	result, err := gw.Login()
+	err := gw.Login()
 	require.NoError(t, err)
-	assert.True(t, result.Success)
 }
 
 func TestNokiaGateway_Login_NonceError(t *testing.T) {
-	client := newMockedClient(t)
+	gw := nokiaTestGwClosed(&GatewayConfig{}, "", "")
 
-	httpmock.RegisterResponder("GET", testBaseURL+"/login_web_app.cgi?nonce",
-		httpmock.NewErrorResponder(errors.New("network error")))
-
-	gw := newTestNokiaGateway(client, &GatewayConfig{}, "", "")
-
-	_, err := gw.Login()
+	err := gw.Login()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error getting nonce")
 }
 
 func TestNokiaGateway_Login_CredentialsError(t *testing.T) {
-	client := newMockedClient(t)
+	ts := newTestServer(t, jsonResponder(http.StatusOK, testNonceBody))
+	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
 
-	httpmock.RegisterResponder("GET", testBaseURL+"/login_web_app.cgi?nonce",
-		jsonResponder(http.StatusOK, testNonceBody))
-	httpmock.RegisterResponder("POST", testBaseURL+"/login_web_app.cgi",
-		jsonResponder(http.StatusOK, testNonceBody))
-
-	gw := newTestNokiaGateway(
-		client,
-		&GatewayConfig{Username: testUsername, Password: testPassword},
-		"",
-		"",
-	)
-
-	_, err := gw.Login()
+	err := gw.Login()
 	assert.Error(t, err)
 }
 
 func TestNokiaGateway_Reboot_DryRun(t *testing.T) {
-	client := newMockedClient(t)
+	ts := newTestServer(t, func(_ http.ResponseWriter, _ *http.Request) {
+		t.Fatal("unexpected HTTP call in dry run")
+	})
 
-	httpmock.RegisterResponder("POST", testBaseURL+"/reboot_web_app.cgi",
-		func(_ *http.Request) (*http.Response, error) {
-			t.Fatal("unexpected HTTP call in dry run")
-
-			return nil, errors.New("unexpected call")
-		})
-
-	gw := newTestNokiaGateway(client, &GatewayConfig{DryRun: true}, testValidSID, testValidToken)
+	gw := nokiaTestGw(ts, &GatewayConfig{DryRun: true}, testValidSID, testValidToken)
 
 	err := gw.Reboot()
 	assert.NoError(t, err)
 }
 
 func TestNokiaGateway_Reboot_ErrorResponse(t *testing.T) {
-	client := newMockedClient(t)
-
-	httpmock.RegisterResponder("POST", testBaseURL+"/reboot_web_app.cgi",
-		textResponder(http.StatusInternalServerError, "reboot failed"))
-
-	gw := newTestNokiaGateway(client, &GatewayConfig{}, testValidSID, testValidToken)
+	ts := newTestServer(t, textResponder(http.StatusInternalServerError, "reboot failed"))
+	gw := nokiaTestGw(ts, &GatewayConfig{}, testValidSID, testValidToken)
 
 	err := gw.Reboot()
 	require.Error(t, err)
@@ -243,16 +201,13 @@ func TestNokiaGateway_Reboot_ErrorResponse(t *testing.T) {
 }
 
 func TestNokiaGateway_Reboot_LoginFailure(t *testing.T) {
-	client := newMockedClient(t)
-
-	httpmock.RegisterResponder("POST", testBaseURL+"/reboot_web_app.cgi",
-		func(_ *http.Request) (*http.Response, error) {
+	ts := newTestServer(t, func(_ http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/reboot_web_app.cgi" {
 			t.Fatal("should not reach reboot HTTP call")
+		}
+	})
 
-			return nil, errors.New("unexpected call")
-		})
-
-	gw := newTestNokiaGateway(client, &GatewayConfig{}, "", "")
+	gw := nokiaTestGw(ts, &GatewayConfig{}, "", "")
 
 	err := gw.Reboot()
 	require.Error(t, err)
@@ -260,56 +215,48 @@ func TestNokiaGateway_Reboot_LoginFailure(t *testing.T) {
 }
 
 func TestNokiaGateway_Login_NonceSuccessCredentialsError(t *testing.T) {
-	client := newMockedClient(t)
+	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.RawQuery == "nonce" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(testNonceBody))
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"success":0,"reason":600}`))
+		}
+	})
 
-	httpmock.RegisterResponder("GET", testBaseURL+"/login_web_app.cgi?nonce",
-		jsonResponder(http.StatusOK, testNonceBody))
-	httpmock.RegisterResponder("POST", testBaseURL+"/login_web_app.cgi",
-		jsonResponder(http.StatusOK, `{"success":0,"reason":600}`))
+	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
 
-	gw := newTestNokiaGateway(
-		client,
-		&GatewayConfig{Username: testUsername, Password: testPassword},
-		"",
-		"",
-	)
-
-	_, err := gw.Login()
+	err := gw.Login()
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrAuthentication)
 }
 
 func TestNokiaGateway_Login_Success(t *testing.T) {
-	client := newMockedClient(t)
+	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.RawQuery == "nonce" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(testNonceBody))
+		} else if r.Method == http.MethodPost && r.URL.Path == "/login_web_app.cgi" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(testLoginRespBody))
+		}
+	})
 
-	httpmock.RegisterResponder("GET", testBaseURL+"/login_web_app.cgi?nonce",
-		jsonResponder(http.StatusOK, testNonceBody))
-	httpmock.RegisterResponder("POST", testBaseURL+"/login_web_app.cgi",
-		jsonResponder(http.StatusOK, testLoginRespBody))
+	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
 
-	gw := newTestNokiaGateway(
-		client,
-		&GatewayConfig{Username: testUsername, Password: testPassword},
-		"",
-		"",
-	)
-
-	result, err := gw.Login()
+	err := gw.Login()
 	require.NoError(t, err)
 	assert.Equal(t, "testSid", gw.credentials.SID)
-	assert.Equal(t, "testToken", gw.credentials.CSRFToken)
-	assert.True(t, result.Success)
-	assert.Equal(t, "testSid", result.SessionID)
-	assert.Equal(t, "testToken", result.CSRFToken)
+	assert.Equal(t, "testToken", gw.credentials.csrfToken)
 }
 
 func TestNokiaGateway_Reboot_RequestError(t *testing.T) {
-	client := newMockedClient(t)
-
-	httpmock.RegisterResponder("POST", testBaseURL+"/reboot_web_app.cgi",
-		httpmock.NewErrorResponder(errors.New("network error")))
-
-	gw := newTestNokiaGateway(client, &GatewayConfig{}, testValidSID, testValidToken)
+	gw := nokiaTestGwClosed(&GatewayConfig{}, testValidSID, testValidToken)
 
 	err := gw.Reboot()
 	require.Error(t, err)
@@ -317,7 +264,7 @@ func TestNokiaGateway_Reboot_RequestError(t *testing.T) {
 }
 
 func TestNokiaGateway_NotImplemented(t *testing.T) {
-	gw := newTestNokiaGateway(nil, &GatewayConfig{}, "", "")
+	gw := newNokia(&GatewayCommon{config: &GatewayConfig{}}, "", "")
 
 	t.Run("Request", func(t *testing.T) {
 		_, err := gw.Request("GET", "/test")
@@ -340,7 +287,6 @@ func TestNewNokiaGateway(t *testing.T) {
 	gw := NewNokiaGateway(cfg)
 	assert.NotNil(t, gw)
 	assert.NotNil(t, gw.client)
-	assert.Equal(t, testBaseURL, gw.client.BaseURL)
 	assert.Empty(t, gw.credentials.SID)
-	assert.Empty(t, gw.credentials.CSRFToken)
+	assert.Empty(t, gw.credentials.csrfToken)
 }

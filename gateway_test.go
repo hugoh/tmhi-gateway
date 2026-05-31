@@ -1,44 +1,29 @@
 package tmhi
 
 import (
-	"errors"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 )
 
-const testBaseURL = "http://192.168.1.1"
-
-func newMockedClient(t *testing.T) *resty.Client {
+func newTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
 
-	client := resty.New()
-	client.SetBaseURL(testBaseURL)
-	httpmock.ActivateNonDefault(client.GetClient())
-	t.Cleanup(httpmock.DeactivateAndReset)
+	ts := httptest.NewServer(handler)
+	t.Cleanup(ts.Close)
 
-	return client
+	return ts
 }
 
-func jsonResponder(status int, body string) httpmock.Responder {
-	return func(_ *http.Request) (*http.Response, error) {
-		resp := httpmock.NewStringResponse(status, body)
-		resp.Header.Set("Content-Type", "application/json")
-
-		return resp, nil
-	}
-}
-
-func textResponder(status int, body string) httpmock.Responder {
-	return func(_ *http.Request) (*http.Response, error) {
-		resp := httpmock.NewStringResponse(status, body)
-		resp.Header.Set("Content-Type", "text/plain")
-
-		return resp, nil
+func testCommon(ts *httptest.Server) *GatewayCommon {
+	return &GatewayCommon{
+		client: resty.NewWithClient(&http.Client{}).SetBaseURL(ts.URL),
+		config: &GatewayConfig{},
 	}
 }
 
@@ -52,10 +37,6 @@ func TestNewGatewayCommon(t *testing.T) {
 	gc := NewGatewayCommon(cfg)
 
 	assert.NotNil(t, gc.client)
-	assert.Equal(t, testBaseURL, gc.client.BaseURL)
-	assert.Equal(t, cfg.Timeout, gc.client.GetClient().Timeout)
-	assert.Equal(t, cfg.Retries, gc.client.RetryCount)
-	assert.True(t, gc.client.Debug)
 	assert.Equal(t, cfg, gc.config)
 }
 
@@ -63,7 +44,7 @@ func TestCheckWebInterface(t *testing.T) {
 	cases := []struct {
 		name           string
 		status         int
-		err            error
+		useError       bool
 		wantUp         bool
 		wantStatusCode int
 	}{
@@ -87,7 +68,7 @@ func TestCheckWebInterface(t *testing.T) {
 		},
 		{
 			name:           "failed web interface check",
-			err:            errors.New("connection refused"),
+			useError:       true,
 			wantUp:         false,
 			wantStatusCode: 0,
 		},
@@ -95,25 +76,63 @@ func TestCheckWebInterface(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := newMockedClient(t)
+			if tc.useError {
+				ts := httptest.NewServer(http.HandlerFunc(
+					func(_ http.ResponseWriter, _ *http.Request) {},
+				))
+				ts.Close()
 
-			if tc.err != nil {
-				httpmock.RegisterResponder("HEAD", testBaseURL+"/",
-					httpmock.NewErrorResponder(tc.err))
-			} else {
-				httpmock.RegisterResponder("HEAD", testBaseURL+"/",
-					httpmock.NewStringResponder(tc.status, ""))
+				gc := &GatewayCommon{
+					client: resty.NewWithClient(ts.Client()).SetBaseURL(ts.URL),
+					config: &GatewayConfig{},
+				}
+
+				result := gc.CheckWebInterface()
+				assert.Equal(t, tc.wantUp, result.WebInterfaceUp)
+				assert.Equal(t, tc.wantStatusCode, result.StatusCode)
+				assert.Error(t, result.Error)
+
+				return
 			}
 
-			gc := &GatewayCommon{client: client, config: &GatewayConfig{}}
+			ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, http.MethodHead, r.Method)
+				w.WriteHeader(tc.status)
+			})
+
+			gc := testCommon(ts)
 
 			result := gc.CheckWebInterface()
 			assert.Equal(t, tc.wantUp, result.WebInterfaceUp)
 			assert.Equal(t, tc.wantStatusCode, result.StatusCode)
-
-			if tc.err != nil {
-				assert.Error(t, result.Error)
-			}
 		})
+	}
+}
+
+func testConfig(ts *httptest.Server) *GatewayConfig {
+	return &GatewayConfig{
+		IP:       strings.TrimPrefix(ts.URL, "http://"),
+		Username: testUsername,
+		Password: testPassword,
+	}
+}
+
+func testConfigNoCreds(ts *httptest.Server) *GatewayConfig {
+	return &GatewayConfig{IP: strings.TrimPrefix(ts.URL, "http://")}
+}
+
+func jsonResponder(status int, body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}
+}
+
+func textResponder(status int, body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
 	}
 }

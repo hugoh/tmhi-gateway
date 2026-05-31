@@ -1,12 +1,14 @@
 package tmhi
 
 import (
+	"fmt"
+
 	"github.com/go-resty/resty/v2"
 )
 
 // Gateway defines the interface for T-Mobile gateway implementations.
 type Gateway interface {
-	Login() (*LoginResult, error)
+	Login() error
 	Reboot() error
 	Request(method, path string) (*InfoResult, error)
 	Info() (*InfoResult, error)
@@ -22,18 +24,22 @@ type GatewayCommon struct {
 
 // NewGatewayCommon creates a new GatewayCommon with the given configuration.
 func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
-	gateway := &GatewayCommon{client: resty.New(), config: cfg}
-
-	gateway.client.
-		SetBaseURL("http://" + cfg.IP).
-		SetDebug(cfg.Debug).
-		SetTimeout(cfg.Timeout)
+	client := resty.New()
+	client.SetBaseURL("http://" + cfg.IP)
+	client.SetTimeout(cfg.Timeout)
 
 	if cfg.Retries > 0 {
-		gateway.client.SetRetryCount(cfg.Retries)
+		client.SetRetryCount(cfg.Retries)
 	}
 
-	return gateway
+	if cfg.Debug {
+		client.SetDebug(true)
+	}
+
+	return &GatewayCommon{
+		client: client,
+		config: cfg,
+	}
 }
 
 // CheckWebInterface checks if the gateway web interface is accessible.
@@ -42,14 +48,10 @@ func (gc *GatewayCommon) CheckWebInterface() *StatusResult {
 
 	result := &StatusResult{}
 	if err != nil {
-		result.Error = err
+		result.Error = fmt.Errorf("send request: %w", err)
 		result.WebInterfaceUp = false
 
 		return result
-	}
-
-	if resp.RawResponse != nil && resp.RawResponse.Body != nil {
-		_ = resp.RawResponse.Body.Close()
 	}
 
 	result.StatusCode = resp.StatusCode()

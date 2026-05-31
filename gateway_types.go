@@ -47,15 +47,6 @@ type SignalResult struct {
 	Generic GenericSignalInfo
 }
 
-// LoginResult contains authentication result.
-type LoginResult struct {
-	Success    bool
-	Token      string
-	Expiration int
-	SessionID  string
-	CSRFToken  string
-}
-
 // StatusResult contains status check result.
 type StatusResult struct {
 	WebInterfaceUp bool
@@ -83,9 +74,4 @@ func (r *InfoResult) String() string {
 	}
 
 	return prettyJSON.String()
-}
-
-// RegistrationResult contains registration status.
-type RegistrationResult struct {
-	Status string
 }

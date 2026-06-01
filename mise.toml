@@ -3,8 +3,9 @@ go = "1.26.3"
 "go:github.com/vladopajic/go-test-coverage/v2" = "2.18.8"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.3.0"
 golangci-lint = "2.12.2"
-gotestsum = "1.13.0"
+goreleaser = "2.16.0"
 cocogitto = "7.0.0"
+gotestsum = "1.13.0"
 hk = "1.46.0"
 rumdl = "0.2.4"
 zizmor = "1.25.2"
@@ -19,46 +20,101 @@ actionlint = "1.7.12"
 COVEROUT = "cover.out"
 HK_PKL_BACKEND = "pklr"
 
+[settings]
+task.timings = false
+
+[tasks."lint:mod"]
+description = "Check go.mod tidiness"
+sources = ["go.mod", "**/*.go"]
+run = "go mod tidy -diff"
+
+[tasks."lint:deadcode"]
+description = "Check for dead code"
+usage = 'flag "--test" help="Include test files"'
+sources = ["**/*.go"]
+run = "deadcode ${usage_test:+-test}  ./... 2>&1 | grep . && { echo 'dead code found'; exit 1; } || true"
+
+[tasks."lint:go"]
+description = "Lint Go source"
+sources = ["**/*.go"]
+usage = 'flag "--fix" help="Automatically fix issues"'
+run = "golangci-lint run ${usage_fix:+--fix} ./..."
+
+[tasks."lint:release"]
+description = "Check release config if present"
+run = "test -f .goreleaser.yml && goreleaser check || true"
+
 [tasks.lint]
-description = "Lint code"
+description = "Lint code, check dead code"
+depends = ["lint:mod", { task = "lint:deadcode", args = ["--test"] }, "lint:go", "lint:release"]
+
+[tasks.fix]
+description = "Lint and fix code"
 run = [
-  "go mod tidy -diff",
-  "deadcode -test ./... 2>&1 | grep . && { echo 'dead code found'; exit 1; } || true",
-  "golangci-lint run ./...",
+  "mise run lint:mod",
+  "mise run lint:deadcode -- --test",
+  "mise run lint:go -- --fix",
 ]
 
 [tasks.test]
-description = "Run tests"
-run = "gotestsum -- ./... -race"
+description = "Run tests with coverage"
+sources = ["**/*.go"]
+run = "gotestsum -- -race -coverprofile=${COVEROUT} -covermode=atomic ./..."
+
+[tasks.test-int]
+description = "Run integration tests"
+sources = ["**/*.go"]
+run = "test -d internal && gotestsum -- -race -tags=integration ./internal/... || true"
 
 [tasks.coverage]
-description = "Generate test coverage"
-run = "go test ./... -coverprofile=${COVEROUT} -covermode=atomic"
-
-[tasks.covercheck]
 description = "Check test coverage"
-depends = ["coverage"]
+depends = ["test"]
 run = "go-test-coverage -config .testcoverage.yml"
 
+[tasks.ci-core]
+description = "Run core CI checks (test, coverage, integration)"
+depends = ["test", "coverage", "test-int"]
+
 [tasks.ci]
-description = "Run CI checks (lint, test, coverage)"
-depends = ["lint", "test", "covercheck"]
+description = "Run full CI pipeline (lint, tests, coverage, build)"
+depends = ["lint", "ci-core", "build"]
+
+[tasks.full-check]
+description = "Run full pre-commit validation (format, fix, core CI)"
+run = [
+  "mise run format",
+  "mise run fix",
+  "mise run ci-core",
+]
 
 [tasks.clean]
 description = "Clean the project"
 run = ["go clean", "rm -f ${COVEROUT}"]
 
-[tasks.fix]
-description = "Fix lint issues"
-run = "golangci-lint run --fix ./..."
-
 [tasks.format]
 description = "Format the code"
-run = "golangci-lint fmt ./..."
+sources = [
+  "**/*.go",
+  "**/*.json",
+  "**/*.md",
+  "**/*.toml",
+  "**/*.yaml",
+  "**/*.yml",
+]
+run = ["golangci-lint fmt ./...", "dprint fmt . --excludes README.md"]
 
 [tasks.tidy]
 description = "Tidy the module"
 run = "go mod tidy -v"
+
+[tasks.build]
+description = "Build application"
+sources = ["**/*.go", "go.mod", "go.sum"]
+run = "go build -o dist/$(basename $(go list -m)) ."
+
+[tasks.dev]
+description = "Development mode"
+run = "go run ."
 
 [tasks.depup]
 description = "Upgrade dependencies"

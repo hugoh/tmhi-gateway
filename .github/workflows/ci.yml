@@ -56,18 +56,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-${{ steps.go-version.outputs.go }}-
       - *mise
-      - name: Lint
-        run: mise lint
-      - name: Test
-        run: mise test
-      - name: Coverage
-        run: mise covercheck
+      - name: Mise CI
+        run: mise ci
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-      - name: Build
-        run: go build ./...
 
   release:
     timeout-minutes: 30

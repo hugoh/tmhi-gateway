@@ -90,8 +90,8 @@ func TestNewAuthError(t *testing.T) {
 	err := NewAuthError(http.StatusUnauthorized, "invalid token")
 	require.Error(t, err)
 
-	var authErr *AuthenticationError
-	require.ErrorAs(t, err, &authErr)
+	authErr, ok := errors.AsType[*AuthenticationError](err)
+	require.True(t, ok)
 	assert.Equal(t, http.StatusUnauthorized, authErr.Status)
 	assert.Equal(t, "invalid token", authErr.Message)
 }
@@ -101,8 +101,8 @@ func TestNewGatewayError(t *testing.T) {
 	err := NewGatewayError("reboot", http.StatusGatewayTimeout, "gateway unresponsive", innerErr)
 	require.Error(t, err)
 
-	var gwErr *GatewayError
-	require.ErrorAs(t, err, &gwErr)
+	gwErr, ok := errors.AsType[*GatewayError](err)
+	require.True(t, ok)
 	assert.Equal(t, "reboot", gwErr.Op)
 	assert.Equal(t, http.StatusGatewayTimeout, gwErr.HTTPStatus)
 	assert.Equal(t, "gateway unresponsive", gwErr.Message)

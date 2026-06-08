@@ -2,7 +2,6 @@ package tmhi
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -41,7 +40,7 @@ func TestArcadyanGateway_Login_Success(t *testing.T) {
 	gw := newArcadyan(testCommon(ts), "", time.Time{})
 	gw.config = testConfig(ts)
 
-	err := gw.Login()
+	err := gw.Login(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, 1234567890, gw.credentials.Expiration)
 	assert.Equal(t, "testtoken", gw.credentials.Token)
@@ -62,7 +61,7 @@ func TestArcadyanGateway_Reboot_Failure(t *testing.T) {
 	)
 	gw.config = testConfig(ts)
 
-	err := gw.Reboot()
+	err := gw.Reboot(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "reboot failed")
 }
@@ -75,7 +74,7 @@ func TestArcadyanGateway_Reboot_DryRun(t *testing.T) {
 	}
 	gw := newArcadyan(gc, "valid-token", time.Now().Add(1*time.Hour))
 
-	err := gw.Reboot()
+	err := gw.Reboot(t.Context())
 	require.NoError(t, err)
 }
 
@@ -93,46 +92,47 @@ func TestArcadyanGateway_Reboot_Success(t *testing.T) {
 	)
 	gw.config = testConfig(ts)
 
-	err := gw.Reboot()
+	err := gw.Reboot(t.Context())
 	require.NoError(t, err)
 }
 
 func TestArcadyanGateway_Login_Errors(t *testing.T) {
 	cases := []struct {
 		name          string
-		setup         func(t *testing.T) (*ArcadyanGateway, func())
+		setup         func(t *testing.T) *ArcadyanGateway
 		errorContains []string
 		errorIs       error
 	}{
 		{
 			name: "non-200 status",
-			setup: func(t *testing.T) (*ArcadyanGateway, func()) {
+			setup: func(t *testing.T) *ArcadyanGateway {
 				t.Helper()
 				ts := newTestServer(t, textResponder(http.StatusUnauthorized, "unauthorized"))
 				gw := newArcadyan(testCommon(ts), "", time.Time{})
 				gw.config = testConfig(ts)
 
-				return gw, func() {}
+				return gw
 			},
 			errorContains: []string{"authentication failed", "401"},
 			errorIs:       ErrAuthentication,
 		},
 		{
 			name: "invalid JSON",
-			setup: func(t *testing.T) (*ArcadyanGateway, func()) {
+			setup: func(t *testing.T) *ArcadyanGateway {
 				t.Helper()
 				ts := newTestServer(t, jsonResponder(http.StatusOK, "{invalid json"))
 				gw := newArcadyan(testCommon(ts), "", time.Time{})
 				gw.config = testConfig(ts)
 
-				return gw, func() {}
+				return gw
 			},
 			errorContains: []string{"failed to decode login response"},
 		},
 		{
 			name: "HTTP client error",
-			setup: func(_ *testing.T) (*ArcadyanGateway, func()) {
-				ts := httptest.NewServer(http.HandlerFunc(
+			setup: func(t *testing.T) *ArcadyanGateway {
+				t.Helper()
+				ts := newTestServer(t, http.HandlerFunc(
 					func(_ http.ResponseWriter, _ *http.Request) {},
 				))
 				ts.Close()
@@ -148,7 +148,7 @@ func TestArcadyanGateway_Login_Errors(t *testing.T) {
 				gw.config.Username = testUsername
 				gw.config.Password = testPassword
 
-				return gw, func() {}
+				return gw
 			},
 			errorContains: []string{"login request failed"},
 		},
@@ -156,10 +156,9 @@ func TestArcadyanGateway_Login_Errors(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gw, cleanup := tc.setup(t)
-			defer cleanup()
+			gw := tc.setup(t)
 
-			err := gw.Login()
+			err := gw.Login(t.Context())
 			require.Error(t, err)
 
 			for _, msg := range tc.errorContains {
@@ -179,7 +178,7 @@ func TestArcadyanGateway_Info_Success(t *testing.T) {
 	gw := newArcadyan(testCommon(ts), "", time.Time{})
 	gw.config = testConfig(ts)
 
-	result, err := gw.Info()
+	result, err := gw.Info(t.Context())
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, http.StatusOK, result.StatusCode)
@@ -249,7 +248,7 @@ func TestArcadyanGateway_Status_Success(t *testing.T) {
 	)
 	gw.config = testConfig(ts)
 
-	result, err := gw.Status()
+	result, err := gw.Status(t.Context())
 	require.NoError(t, err)
 	assert.True(t, result.WebInterfaceUp)
 	assert.Equal(t, "registered", result.Registration)
@@ -279,7 +278,7 @@ func TestArcadyanGateway_Status_Error(t *testing.T) {
 	)
 	gw.config = testConfig(ts)
 
-	result, err := gw.Status()
+	result, err := gw.Status(t.Context())
 	require.NoError(t, err)
 	assert.True(t, result.WebInterfaceUp)
 	assert.Error(t, result.Error)
@@ -292,7 +291,7 @@ func TestArcadyanGateway_Request_Methods(t *testing.T) {
 		gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
 		gw.config = testConfigNoCreds(ts)
 
-		result, err := gw.Request("GET", "/test")
+		result, err := gw.Request(t.Context(), "GET", "/test")
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Equal(t, http.StatusOK, result.StatusCode)
@@ -304,7 +303,7 @@ func TestArcadyanGateway_Request_Methods(t *testing.T) {
 		gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
 		gw.config = testConfig(ts)
 
-		result, err := gw.Request("POST", "/test")
+		result, err := gw.Request(t.Context(), "POST", "/test")
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 	})
@@ -315,7 +314,7 @@ func TestArcadyanGateway_Request_Methods(t *testing.T) {
 		gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
 		gw.config = testConfigNoCreds(ts)
 
-		result, err := gw.Request("GET", "/test")
+		result, err := gw.Request(t.Context(), "GET", "/test")
 		require.NoError(t, err)
 		assert.Equal(t, "text/plain", result.ContentType)
 	})
@@ -326,7 +325,7 @@ func TestArcadyanGateway_Request_Methods(t *testing.T) {
 		gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
 		gw.config = testConfigNoCreds(ts)
 
-		result, err := gw.Request("GET", "/test")
+		result, err := gw.Request(t.Context(), "GET", "/test")
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusNoContent, result.StatusCode)
 	})
@@ -474,7 +473,7 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 				)
 				gw.config = testConfig(ts)
 
-				result, err := gw.Signal()
+				result, err := gw.Signal(t.Context())
 				require.NoError(t, err)
 				require.NotNil(t, result)
 				tc.check(t, result)
@@ -485,13 +484,14 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 	t.Run("signal errors", func(t *testing.T) {
 		cases := []struct {
 			name          string
-			setup         func(t *testing.T) (*ArcadyanGateway, func())
+			setup         func(t *testing.T) *ArcadyanGateway
 			errorContains string
 		}{
 			{
 				name: "with network error",
-				setup: func(_ *testing.T) (*ArcadyanGateway, func()) {
-					ts := httptest.NewServer(http.HandlerFunc(
+				setup: func(t *testing.T) *ArcadyanGateway {
+					t.Helper()
+					ts := newTestServer(t, http.HandlerFunc(
 						func(_ http.ResponseWriter, _ *http.Request) {},
 					))
 					ts.Close()
@@ -506,19 +506,19 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 					)
 					gw.config = testConfigNoCreds(ts)
 
-					return gw, func() {}
+					return gw
 				},
 				errorContains: "failed to get signal info",
 			},
 			{
 				name: "with non-200 status",
-				setup: func(t *testing.T) (*ArcadyanGateway, func()) {
+				setup: func(t *testing.T) *ArcadyanGateway {
 					t.Helper()
 					ts := newTestServer(t, jsonResponder(http.StatusInternalServerError, "{}"))
 					gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
 					gw.config = testConfigNoCreds(ts)
 
-					return gw, func() {}
+					return gw
 				},
 				errorContains: "signal failed",
 			},
@@ -526,10 +526,9 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
-				gw, cleanup := tc.setup(t)
-				defer cleanup()
+				gw := tc.setup(t)
 
-				_, err := gw.Signal()
+				_, err := gw.Signal(t.Context())
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tc.errorContains)
 			})
@@ -596,14 +595,14 @@ func TestArcadyanGateway_Login_AlreadyLoggedIn(t *testing.T) {
 		},
 	}
 
-	err := gw.Login()
+	err := gw.Login(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "existing-token", gw.credentials.Token)
 }
 
 func TestArcadyanGateway_Reboot_LoginFailure(t *testing.T) {
 	// When not logged in and login fails, reboot should return error
-	ts := httptest.NewServer(http.HandlerFunc(
+	ts := newTestServer(t, http.HandlerFunc(
 		func(_ http.ResponseWriter, _ *http.Request) {},
 	))
 	ts.Close()
@@ -619,7 +618,7 @@ func TestArcadyanGateway_Reboot_LoginFailure(t *testing.T) {
 	gw.config.Username = testUsername
 	gw.config.Password = testPassword
 
-	err := gw.Reboot()
+	err := gw.Reboot(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot reboot without successful login")
 }

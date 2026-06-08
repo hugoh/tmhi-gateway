@@ -1,6 +1,7 @@
 package tmhi
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
@@ -42,17 +43,17 @@ func (l *nokiaLoginResp) hasCredentials() bool {
 }
 
 // Login authenticates with the Nokia gateway.
-func (n *NokiaGateway) Login() error {
+func (n *NokiaGateway) Login(ctx context.Context) error {
 	if n.isLoggedIn() {
 		return nil
 	}
 
-	nonceResp, nonceErr := n.getNonce()
+	nonceResp, nonceErr := n.getNonce(ctx)
 	if nonceErr != nil {
 		return fmt.Errorf("error getting nonce: %w", nonceErr)
 	}
 
-	loginResp, loginErr := n.getCredentials(*nonceResp)
+	loginResp, loginErr := n.getCredentials(ctx, *nonceResp)
 	if loginErr != nil {
 		return fmt.Errorf("login failed: %w", loginErr)
 	}
@@ -65,8 +66,8 @@ func (n *NokiaGateway) Login() error {
 }
 
 // Reboot restarts the Nokia gateway.
-func (n *NokiaGateway) Reboot() error {
-	if err := n.Login(); err != nil {
+func (n *NokiaGateway) Reboot(ctx context.Context) error {
+	if err := n.Login(ctx); err != nil {
 		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
 	}
 
@@ -78,7 +79,7 @@ func (n *NokiaGateway) Reboot() error {
 		return nil
 	}
 
-	resp, err := n.client.R().SetFormData(formData).Post("/reboot_web_app.cgi")
+	resp, err := n.client.R().SetContext(ctx).SetFormData(formData).Post("/reboot_web_app.cgi")
 	if err != nil {
 		return fmt.Errorf("error sending reboot request: %w", err)
 	}
@@ -91,22 +92,22 @@ func (n *NokiaGateway) Reboot() error {
 }
 
 // Request is not implemented for Nokia gateway.
-func (*NokiaGateway) Request(_, _ string) (*InfoResult, error) {
+func (*NokiaGateway) Request(_ context.Context, _, _ string) (*InfoResult, error) {
 	return nil, ErrNotImplemented
 }
 
 // Info is not implemented for Nokia gateway.
-func (*NokiaGateway) Info() (*InfoResult, error) {
+func (*NokiaGateway) Info(_ context.Context) (*InfoResult, error) {
 	return nil, ErrNotImplemented
 }
 
 // Status checks the gateway connection status.
-func (n *NokiaGateway) Status() (*StatusResult, error) {
-	return n.CheckWebInterface(), nil
+func (n *NokiaGateway) Status(ctx context.Context) (*StatusResult, error) {
+	return n.CheckWebInterface(ctx), nil
 }
 
 // Signal is not implemented for Nokia gateway.
-func (*NokiaGateway) Signal() (*SignalResult, error) {
+func (*NokiaGateway) Signal(_ context.Context) (*SignalResult, error) {
 	return nil, ErrNotImplemented
 }
 
@@ -114,7 +115,10 @@ func (n *NokiaGateway) isLoggedIn() bool {
 	return n.credentials.SID != "" && n.credentials.csrfToken != ""
 }
 
-func (n *NokiaGateway) getCredentials(nonceResp nonceResp) (*nokiaLoginResp, error) {
+func (n *NokiaGateway) getCredentials(
+	ctx context.Context,
+	nonceResp nonceResp,
+) (*nokiaLoginResp, error) {
 	passHashInput := strings.ToLower(n.config.Password)
 	userPassHash := sha256Hash(n.config.Username, passHashInput)
 	userPassNonceHash := sha256URL(userPassHash, nonceResp.Nonce)
@@ -131,7 +135,11 @@ func (n *NokiaGateway) getCredentials(nonceResp nonceResp) (*nokiaLoginResp, err
 
 	var loginResp nokiaLoginResp
 
-	resp, err := n.client.R().SetResult(&loginResp).SetFormData(reqParams).Post(reqURL)
+	resp, err := n.client.R().
+		SetContext(ctx).
+		SetResult(&loginResp).
+		SetFormData(reqParams).
+		Post(reqURL)
 	if err != nil {
 		return nil, NewAuthError(0, err.Error())
 	}
@@ -150,10 +158,13 @@ func (n *NokiaGateway) getCredentials(nonceResp nonceResp) (*nokiaLoginResp, err
 	return &loginResp, authErr
 }
 
-func (n *NokiaGateway) getNonce() (*nonceResp, error) {
+func (n *NokiaGateway) getNonce(ctx context.Context) (*nonceResp, error) {
 	var result nonceResp
 
-	_, err := n.client.R().SetResult(&result).Get("/login_web_app.cgi?" + nonceParam)
+	_, err := n.client.R().
+		SetContext(ctx).
+		SetResult(&result).
+		Get("/login_web_app.cgi?" + nonceParam)
 	if err != nil {
 		return nil, fmt.Errorf("error getting nonce: %w", err)
 	}

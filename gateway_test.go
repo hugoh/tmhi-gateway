@@ -87,7 +87,7 @@ func TestCheckWebInterface(t *testing.T) {
 					config: &GatewayConfig{},
 				}
 
-				result := gc.CheckWebInterface()
+				result := gc.CheckWebInterface(t.Context())
 				assert.Equal(t, tc.wantUp, result.WebInterfaceUp)
 				assert.Equal(t, tc.wantStatusCode, result.StatusCode)
 				assert.Error(t, result.Error)
@@ -102,7 +102,7 @@ func TestCheckWebInterface(t *testing.T) {
 
 			gc := testCommon(ts)
 
-			result := gc.CheckWebInterface()
+			result := gc.CheckWebInterface(t.Context())
 			assert.Equal(t, tc.wantUp, result.WebInterfaceUp)
 			assert.Equal(t, tc.wantStatusCode, result.StatusCode)
 		})

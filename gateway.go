@@ -1,6 +1,7 @@
 package tmhi
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/go-resty/resty/v2"
@@ -8,12 +9,12 @@ import (
 
 // Gateway defines the interface for T-Mobile gateway implementations.
 type Gateway interface {
-	Login() error
-	Reboot() error
-	Request(method, path string) (*InfoResult, error)
-	Info() (*InfoResult, error)
-	Status() (*StatusResult, error)
-	Signal() (*SignalResult, error)
+	Login(ctx context.Context) error
+	Reboot(ctx context.Context) error
+	Request(ctx context.Context, method, path string) (*InfoResult, error)
+	Info(ctx context.Context) (*InfoResult, error)
+	Status(ctx context.Context) (*StatusResult, error)
+	Signal(ctx context.Context) (*SignalResult, error)
 }
 
 // GatewayCommon provides shared functionality for gateway implementations.
@@ -43,8 +44,8 @@ func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
 }
 
 // CheckWebInterface checks if the gateway web interface is accessible.
-func (gc *GatewayCommon) CheckWebInterface() *StatusResult {
-	resp, err := gc.client.R().Head("/")
+func (gc *GatewayCommon) CheckWebInterface(ctx context.Context) *StatusResult {
+	resp, err := gc.client.R().SetContext(ctx).Head("/")
 
 	result := &StatusResult{}
 	if err != nil {

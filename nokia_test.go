@@ -94,7 +94,7 @@ func TestNokiaGateway_getCredentials_ErrorResponse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			gw := nokiaTestGw(tc.ts, nokiaConfig(tc.ts), "", "")
 
-			_, err := gw.getCredentials(nonceResp{Nonce: "test"})
+			_, err := gw.getCredentials(t.Context(), nonceResp{Nonce: "test"})
 			require.Error(t, err)
 			assert.ErrorIs(t, err, ErrAuthentication)
 		})
@@ -110,7 +110,7 @@ func TestNokiaGateway_Reboot_Success(t *testing.T) {
 
 	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
 
-	err := gw.Reboot()
+	err := gw.Reboot(t.Context())
 	assert.NoError(t, err)
 }
 
@@ -122,7 +122,7 @@ func TestNokiaGateway_Status(t *testing.T) {
 
 	gw := nokiaTestGw(ts, &GatewayConfig{}, "", "")
 
-	result, err := gw.Status()
+	result, err := gw.Status(t.Context())
 	require.NoError(t, err)
 	assert.True(t, result.WebInterfaceUp)
 	assert.Equal(t, http.StatusOK, result.StatusCode)
@@ -131,7 +131,7 @@ func TestNokiaGateway_Status(t *testing.T) {
 func TestNokiaGateway_getNonce_ErrorResponse(t *testing.T) {
 	gw := nokiaTestGwClosed(&GatewayConfig{}, "", "")
 
-	_, err := gw.getNonce()
+	_, err := gw.getNonce(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error getting nonce")
 }
@@ -140,7 +140,7 @@ func TestNokiaGateway_getNonce_Success(t *testing.T) {
 	ts := newTestServer(t, jsonResponder(http.StatusOK, testNonceBody))
 	gw := nokiaTestGw(ts, &GatewayConfig{}, "", "")
 
-	nonceResp, err := gw.getNonce()
+	nonceResp, err := gw.getNonce(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "testNonce", nonceResp.Nonce)
 	assert.Equal(t, "testPubkey", nonceResp.Pubkey)
@@ -151,7 +151,10 @@ func TestNokiaGateway_getCredentials_Success(t *testing.T) {
 	ts := newTestServer(t, jsonResponder(http.StatusOK, testLoginRespBody))
 	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
 
-	loginResp, err := gw.getCredentials(nonceResp{Nonce: "testNonce", RandomKey: "testRandomKey"})
+	loginResp, err := gw.getCredentials(
+		t.Context(),
+		nonceResp{Nonce: "testNonce", RandomKey: "testRandomKey"},
+	)
 	require.NoError(t, err)
 	assert.Equal(t, "testSid", loginResp.Sid)
 	assert.Equal(t, "testToken", loginResp.CsrfToken)
@@ -160,14 +163,14 @@ func TestNokiaGateway_getCredentials_Success(t *testing.T) {
 func TestNokiaGateway_Login_Alreadyauthenticated(t *testing.T) {
 	gw := newNokia(&GatewayCommon{config: &GatewayConfig{}}, "valid-sid", "valid-token")
 
-	err := gw.Login()
+	err := gw.Login(t.Context())
 	require.NoError(t, err)
 }
 
 func TestNokiaGateway_Login_NonceError(t *testing.T) {
 	gw := nokiaTestGwClosed(&GatewayConfig{}, "", "")
 
-	err := gw.Login()
+	err := gw.Login(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error getting nonce")
 }
@@ -176,7 +179,7 @@ func TestNokiaGateway_Login_CredentialsError(t *testing.T) {
 	ts := newTestServer(t, jsonResponder(http.StatusOK, testNonceBody))
 	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
 
-	err := gw.Login()
+	err := gw.Login(t.Context())
 	assert.Error(t, err)
 }
 
@@ -187,7 +190,7 @@ func TestNokiaGateway_Reboot_DryRun(t *testing.T) {
 
 	gw := nokiaTestGw(ts, &GatewayConfig{DryRun: true}, testValidSID, testValidToken)
 
-	err := gw.Reboot()
+	err := gw.Reboot(t.Context())
 	assert.NoError(t, err)
 }
 
@@ -195,7 +198,7 @@ func TestNokiaGateway_Reboot_ErrorResponse(t *testing.T) {
 	ts := newTestServer(t, textResponder(http.StatusInternalServerError, "reboot failed"))
 	gw := nokiaTestGw(ts, &GatewayConfig{}, testValidSID, testValidToken)
 
-	err := gw.Reboot()
+	err := gw.Reboot(t.Context())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrRebootFailed)
 }
@@ -209,7 +212,7 @@ func TestNokiaGateway_Reboot_LoginFailure(t *testing.T) {
 
 	gw := nokiaTestGw(ts, &GatewayConfig{}, "", "")
 
-	err := gw.Reboot()
+	err := gw.Reboot(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot reboot without successful login")
 }
@@ -229,7 +232,7 @@ func TestNokiaGateway_Login_NonceSuccessCredentialsError(t *testing.T) {
 
 	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
 
-	err := gw.Login()
+	err := gw.Login(t.Context())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrAuthentication)
 }
@@ -249,7 +252,7 @@ func TestNokiaGateway_Login_Success(t *testing.T) {
 
 	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
 
-	err := gw.Login()
+	err := gw.Login(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "testSid", gw.credentials.SID)
 	assert.Equal(t, "testToken", gw.credentials.csrfToken)
@@ -258,7 +261,7 @@ func TestNokiaGateway_Login_Success(t *testing.T) {
 func TestNokiaGateway_Reboot_RequestError(t *testing.T) {
 	gw := nokiaTestGwClosed(&GatewayConfig{}, testValidSID, testValidToken)
 
-	err := gw.Reboot()
+	err := gw.Reboot(t.Context())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "error sending reboot request")
 }
@@ -267,17 +270,17 @@ func TestNokiaGateway_NotImplemented(t *testing.T) {
 	gw := newNokia(&GatewayCommon{config: &GatewayConfig{}}, "", "")
 
 	t.Run("Request", func(t *testing.T) {
-		_, err := gw.Request("GET", "/test")
+		_, err := gw.Request(t.Context(), "GET", "/test")
 		assert.ErrorIs(t, err, ErrNotImplemented)
 	})
 
 	t.Run("Info", func(t *testing.T) {
-		_, err := gw.Info()
+		_, err := gw.Info(t.Context())
 		assert.ErrorIs(t, err, ErrNotImplemented)
 	})
 
 	t.Run("Signal", func(t *testing.T) {
-		_, err := gw.Signal()
+		_, err := gw.Signal(t.Context())
 		assert.ErrorIs(t, err, ErrNotImplemented)
 	})
 }

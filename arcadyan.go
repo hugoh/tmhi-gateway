@@ -2,6 +2,7 @@
 package tmhi
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -35,7 +36,7 @@ func NewArcadyanGateway(cfg *GatewayConfig) *ArcadyanGateway {
 }
 
 // Login authenticates with the Arcadyan gateway.
-func (a *ArcadyanGateway) Login() error {
+func (a *ArcadyanGateway) Login(ctx context.Context) error {
 	if a.isLoggedIn() {
 		return nil
 	}
@@ -56,7 +57,7 @@ func (a *ArcadyanGateway) Login() error {
 		}
 	}
 
-	resp, err := a.client.R().SetResult(&loginResp).SetBody(bodyMap).Post(reqPath)
+	resp, err := a.client.R().SetContext(ctx).SetResult(&loginResp).SetBody(bodyMap).Post(reqPath)
 	if err != nil {
 		return fmt.Errorf("login request failed: failed to decode login response: %w", err)
 	}
@@ -79,8 +80,8 @@ func (a *ArcadyanGateway) Login() error {
 }
 
 // Reboot restarts the Arcadyan gateway.
-func (a *ArcadyanGateway) Reboot() error {
-	err := a.Login()
+func (a *ArcadyanGateway) Reboot(ctx context.Context) error {
+	err := a.Login(ctx)
 	if err != nil {
 		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
 	}
@@ -91,7 +92,7 @@ func (a *ArcadyanGateway) Reboot() error {
 
 	rebootRequestPath := "/TMI/v1/gateway/reset?set=reboot"
 
-	resp, err := a.client.R().Post(rebootRequestPath)
+	resp, err := a.client.R().SetContext(ctx).Post(rebootRequestPath)
 	if err != nil {
 		return fmt.Errorf("reboot request failed: %w", err)
 	}
@@ -104,13 +105,13 @@ func (a *ArcadyanGateway) Reboot() error {
 }
 
 // Info retrieves gateway information.
-func (a *ArcadyanGateway) Info() (*InfoResult, error) {
-	return a.Request("GET", infoURL)
+func (a *ArcadyanGateway) Info(ctx context.Context) (*InfoResult, error) {
+	return a.Request(ctx, "GET", infoURL)
 }
 
 // Request makes an HTTP request to the gateway.
-func (a *ArcadyanGateway) Request(method, path string) (*InfoResult, error) {
-	resp, err := a.client.R().Execute(method, path)
+func (a *ArcadyanGateway) Request(ctx context.Context, method, path string) (*InfoResult, error) {
+	resp, err := a.client.R().SetContext(ctx).Execute(method, path)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -134,8 +135,8 @@ func (a *ArcadyanGateway) Request(method, path string) (*InfoResult, error) {
 }
 
 // Status checks the gateway connection status.
-func (a *ArcadyanGateway) Status() (*StatusResult, error) {
-	webResult := a.CheckWebInterface()
+func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
+	webResult := a.CheckWebInterface(ctx)
 
 	var result struct {
 		Signal struct {
@@ -145,7 +146,7 @@ func (a *ArcadyanGateway) Status() (*StatusResult, error) {
 		}
 	}
 
-	resp, err := a.client.R().SetResult(&result).Get(infoURL)
+	resp, err := a.client.R().SetContext(ctx).SetResult(&result).Get(infoURL)
 	if err != nil {
 		return &StatusResult{
 			WebInterfaceUp: webResult.WebInterfaceUp,
@@ -174,12 +175,12 @@ func (a *ArcadyanGateway) Status() (*StatusResult, error) {
 }
 
 // Signal retrieves signal strength information.
-func (a *ArcadyanGateway) Signal() (*SignalResult, error) {
+func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
 	var result struct {
 		Signal signalResult
 	}
 
-	resp, err := a.client.R().SetResult(&result).Get(infoURL)
+	resp, err := a.client.R().SetContext(ctx).SetResult(&result).Get(infoURL)
 	if err != nil {
 		return nil, NewGatewayError("signal", 0, "failed to get signal info", err)
 	}

@@ -3,6 +3,7 @@ package tmhi
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 )
 
@@ -85,10 +86,21 @@ func (n *NokiaGateway) Reboot(ctx context.Context) error {
 	}
 
 	if resp.IsError() {
+		if resp.StatusCode() == http.StatusUnauthorized || resp.StatusCode() == http.StatusForbidden {
+			n.logout()
+		}
+
 		return NewGatewayError("reboot", resp.StatusCode(), resp.String(), ErrRebootFailed)
 	}
 
+	// A successful reboot invalidates the session on the gateway side.
+	n.logout()
+
 	return nil
+}
+
+func (n *NokiaGateway) logout() {
+	n.credentials = nokiaLoginData{}
 }
 
 // Request is not implemented for Nokia gateway.

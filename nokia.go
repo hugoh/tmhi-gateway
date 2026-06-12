@@ -9,7 +9,7 @@ import (
 
 const nonceParam = "nonce"
 
-type nonceResp struct {
+type nokiaNonce struct {
 	Nonce     string
 	Pubkey    string
 	RandomKey string
@@ -49,19 +49,20 @@ func (n *NokiaGateway) Login(ctx context.Context) error {
 		return nil
 	}
 
-	nonceResp, nonceErr := n.getNonce(ctx)
+	nonce, nonceErr := n.getNonce(ctx)
 	if nonceErr != nil {
 		return fmt.Errorf("error getting nonce: %w", nonceErr)
 	}
 
-	loginResp, loginErr := n.getCredentials(ctx, *nonceResp)
+	loginResp, loginErr := n.getCredentials(ctx, *nonce)
 	if loginErr != nil {
 		return fmt.Errorf("login failed: %w", loginErr)
 	}
 
 	n.credentials.SID = loginResp.Sid
 	n.credentials.csrfToken = loginResp.CsrfToken
-	n.client.SetHeader("Cookie", "sid="+n.credentials.SID)
+	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
+	n.client.SetCookie(&http.Cookie{Name: "sid", Value: n.credentials.SID})
 
 	return nil
 }
@@ -130,16 +131,16 @@ func (n *NokiaGateway) logout() {
 
 func (n *NokiaGateway) getCredentials(
 	ctx context.Context,
-	nonceResp nonceResp,
+	nonce nokiaNonce,
 ) (*nokiaLoginResp, error) {
 	passHashInput := strings.ToLower(n.config.Password)
 	userPassHash := sha256Hash(n.config.Username, passHashInput)
-	userPassNonceHash := sha256URL(userPassHash, nonceResp.Nonce)
+	userPassNonceHash := sha256URL(userPassHash, nonce.Nonce)
 	reqParams := map[string]string{
-		"userhash":      sha256URL(n.config.Username, nonceResp.Nonce),
-		"RandomKeyhash": sha256URL(nonceResp.RandomKey, nonceResp.Nonce),
+		"userhash":      sha256URL(n.config.Username, nonce.Nonce),
+		"RandomKeyhash": sha256URL(nonce.RandomKey, nonce.Nonce),
 		"response":      userPassNonceHash,
-		nonceParam:      base64urlEscape(nonceResp.Nonce),
+		nonceParam:      base64urlEscape(nonce.Nonce),
 		"enckey":        random16bytes(),
 		"enciv":         random16bytes(),
 	}
@@ -161,18 +162,18 @@ func (n *NokiaGateway) getCredentials(
 		return nil, NewAuthError(resp.StatusCode(), resp.String(), nil)
 	}
 
-	var authErr error
-	if loginResp.hasCredentials() {
-		authErr = nil
-	} else {
-		authErr = NewAuthError(0, "no valid credentials returned", nil)
+	if !loginResp.hasCredentials() {
+		return nil, NewAuthError(0, fmt.Sprintf(
+			"no valid credentials returned (success=%d, reason=%d)",
+			loginResp.Success, loginResp.Reason,
+		), nil)
 	}
 
-	return &loginResp, authErr
+	return &loginResp, nil
 }
 
-func (n *NokiaGateway) getNonce(ctx context.Context) (*nonceResp, error) {
-	var result nonceResp
+func (n *NokiaGateway) getNonce(ctx context.Context) (*nokiaNonce, error) {
+	var result nokiaNonce
 
 	resp, err := n.client.R().
 		SetContext(ctx).

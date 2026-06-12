@@ -94,7 +94,7 @@ func TestNokiaGateway_getCredentials_ErrorResponse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			gw := nokiaTestGw(tc.ts, nokiaConfig(tc.ts), "", "")
 
-			_, err := gw.getCredentials(t.Context(), nonceResp{Nonce: "test"})
+			_, err := gw.getCredentials(t.Context(), nokiaNonce{Nonce: "test"})
 			require.Error(t, err)
 			assert.ErrorIs(t, err, ErrAuthentication)
 		})
@@ -159,11 +159,11 @@ func TestNokiaGateway_getNonce_Success(t *testing.T) {
 	ts := newTestServer(t, jsonResponder(http.StatusOK, testNonceBody))
 	gw := nokiaTestGw(ts, &GatewayConfig{}, "", "")
 
-	nonceResp, err := gw.getNonce(t.Context())
+	nonce, err := gw.getNonce(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, "testNonce", nonceResp.Nonce)
-	assert.Equal(t, "testPubkey", nonceResp.Pubkey)
-	assert.Equal(t, "testRandomKey", nonceResp.RandomKey)
+	assert.Equal(t, "testNonce", nonce.Nonce)
+	assert.Equal(t, "testPubkey", nonce.Pubkey)
+	assert.Equal(t, "testRandomKey", nonce.RandomKey)
 }
 
 func TestNokiaGateway_getCredentials_Success(t *testing.T) {
@@ -172,7 +172,7 @@ func TestNokiaGateway_getCredentials_Success(t *testing.T) {
 
 	loginResp, err := gw.getCredentials(
 		t.Context(),
-		nonceResp{Nonce: "testNonce", RandomKey: "testRandomKey"},
+		nokiaNonce{Nonce: "testNonce", RandomKey: "testRandomKey"},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, "testSid", loginResp.Sid)

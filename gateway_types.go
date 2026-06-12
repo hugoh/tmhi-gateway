@@ -42,8 +42,8 @@ type GenericSignalInfo struct {
 
 // SignalResult contains complete signal information.
 type SignalResult struct {
-	FourG   *FourGSignal
-	FiveG   *FiveGSignal
+	FourG   *FourGSignal `json:"4g"`
+	FiveG   *FiveGSignal `json:"5g"`
 	Generic GenericSignalInfo
 }
 

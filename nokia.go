@@ -86,21 +86,18 @@ func (n *NokiaGateway) Reboot(ctx context.Context) error {
 	}
 
 	if resp.IsError() {
-		if resp.StatusCode() == http.StatusUnauthorized || resp.StatusCode() == http.StatusForbidden {
+		status := resp.StatusCode()
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
 			n.logout()
 		}
 
-		return NewGatewayError("reboot", resp.StatusCode(), resp.String(), ErrRebootFailed)
+		return NewGatewayError("reboot", status, resp.String(), ErrRebootFailed)
 	}
 
 	// A successful reboot invalidates the session on the gateway side.
 	n.logout()
 
 	return nil
-}
-
-func (n *NokiaGateway) logout() {
-	n.credentials = nokiaLoginData{}
 }
 
 // Request is not implemented for Nokia gateway.
@@ -125,6 +122,10 @@ func (*NokiaGateway) Signal(_ context.Context) (*SignalResult, error) {
 
 func (n *NokiaGateway) isLoggedIn() bool {
 	return n.credentials.SID != "" && n.credentials.csrfToken != ""
+}
+
+func (n *NokiaGateway) logout() {
+	n.credentials = nokiaLoginData{}
 }
 
 func (n *NokiaGateway) getCredentials(

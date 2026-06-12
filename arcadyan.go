@@ -178,7 +178,7 @@ func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 // Signal retrieves signal strength information.
 func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
 	var result struct {
-		Signal signalResult
+		Signal SignalResult
 	}
 
 	resp, err := a.client.R().SetContext(ctx).SetResult(&result).Get(infoURL)
@@ -190,90 +190,12 @@ func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
 		return nil, NewGatewayError(
 			"signal",
 			resp.StatusCode(),
-			ErrSignalFailed.Error(),
+			"failed to get signal info",
 			ErrSignalFailed,
 		)
 	}
 
-	return convertSignalResult(result.Signal), nil
-}
-
-type signalResult struct {
-	FourG   *fourGSignal `json:"4g"`
-	FiveG   *fiveGSignal `json:"5g"`
-	Generic struct {
-		APN          string
-		HasIPv6      bool
-		Registration string
-		Roaming      bool
-	}
-}
-
-type fourGSignal struct {
-	signalData
-
-	ENBID int
-}
-
-type fiveGSignal struct {
-	signalData
-
-	AntennaUsed string
-	GNBID       int
-}
-
-type signalData struct {
-	Bands []string
-	Bars  float64
-	CID   int
-	RSRP  int
-	RSRQ  int
-	RSSI  int
-	SINR  int
-}
-
-func convertSignalResult(sig signalResult) *SignalResult {
-	result := &SignalResult{
-		Generic: GenericSignalInfo{
-			APN:          sig.Generic.APN,
-			HasIPv6:      sig.Generic.HasIPv6,
-			Registration: sig.Generic.Registration,
-			Roaming:      sig.Generic.Roaming,
-		},
-	}
-
-	if sig.FourG != nil {
-		result.FourG = &FourGSignal{
-			SignalData: SignalData{
-				Bands: sig.FourG.Bands,
-				Bars:  sig.FourG.Bars,
-				CID:   sig.FourG.CID,
-				RSRP:  sig.FourG.RSRP,
-				RSRQ:  sig.FourG.RSRQ,
-				RSSI:  sig.FourG.RSSI,
-				SINR:  sig.FourG.SINR,
-			},
-			ENBID: sig.FourG.ENBID,
-		}
-	}
-
-	if sig.FiveG != nil {
-		result.FiveG = &FiveGSignal{
-			SignalData: SignalData{
-				Bands: sig.FiveG.Bands,
-				Bars:  sig.FiveG.Bars,
-				CID:   sig.FiveG.CID,
-				RSRP:  sig.FiveG.RSRP,
-				RSRQ:  sig.FiveG.RSRQ,
-				RSSI:  sig.FiveG.RSSI,
-				SINR:  sig.FiveG.SINR,
-			},
-			AntennaUsed: sig.FiveG.AntennaUsed,
-			GNBID:       sig.FiveG.GNBID,
-		}
-	}
-
-	return result
+	return &result.Signal, nil
 }
 
 func (a *ArcadyanGateway) isLoggedIn() bool {

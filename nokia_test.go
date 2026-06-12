@@ -111,7 +111,7 @@ func TestNokiaGateway_Reboot_Success(t *testing.T) {
 	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
 
 	err := gw.Reboot(t.Context())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, gw.isLoggedIn(), "successful reboot should invalidate the cached session")
 }
 
@@ -120,8 +120,7 @@ func TestNokiaGateway_Reboot_StaleSession(t *testing.T) {
 	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
 
 	err := gw.Reboot(t.Context())
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrRebootFailed)
+	require.ErrorIs(t, err, ErrRebootFailed)
 	assert.False(t, gw.isLoggedIn(), "auth rejection should clear cached credentials")
 }
 

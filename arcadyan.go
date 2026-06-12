@@ -23,9 +23,13 @@ type ArcadyanGateway struct {
 }
 
 type arcadianLoginData struct {
-	Expiration int
+	Expiration int64
 	Token      string
 }
+
+// expirationMargin re-authenticates slightly before token expiry so a
+// token cannot lapse mid-request.
+const expirationMargin = 30 * time.Second
 
 // NewArcadyanGateway creates a new Arcadyan gateway instance.
 func NewArcadyanGateway(cfg *GatewayConfig) *ArcadyanGateway {
@@ -50,7 +54,7 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 
 	var loginResp struct {
 		Auth struct {
-			Expiration       int
+			Expiration       int64
 			RefreshCountLeft int
 			RefreshCountMax  int
 			Token            string
@@ -273,7 +277,7 @@ func convertSignalResult(sig signalResult) *SignalResult {
 }
 
 func (a *ArcadyanGateway) isLoggedIn() bool {
-	now := int(time.Now().Unix())
+	deadline := time.Now().Add(expirationMargin).Unix()
 
-	return a.credentials.Token != "" && a.credentials.Expiration > now
+	return a.credentials.Token != "" && a.credentials.Expiration > deadline
 }

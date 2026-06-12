@@ -146,29 +146,26 @@ func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 		}
 	}
 
+	webResult.Registration = "unknown"
+
 	resp, err := a.client.R().SetContext(ctx).SetResult(&result).Get(infoURL)
-	if err != nil {
-		return &StatusResult{
-			WebInterfaceUp: webResult.WebInterfaceUp,
-			StatusCode:     webResult.StatusCode,
-			Error:          NewGatewayError("status", 0, "failed to get registration status", err),
-		}, nil
-	}
 
-	regStatus := "unknown"
-	if resp.IsSuccess() {
-		regStatus = result.Signal.Generic.Registration
-	}
-
-	webResult.Registration = regStatus
-
-	if resp.IsError() {
-		webResult.Error = NewGatewayError(
-			"status",
-			resp.StatusCode(),
-			ErrSignalFailed.Error(),
-			ErrSignalFailed,
-		)
+	switch {
+	case err != nil:
+		if webResult.Error == nil {
+			webResult.Error = NewGatewayError("status", 0, "failed to get registration status", err)
+		}
+	case resp.IsError():
+		if webResult.Error == nil {
+			webResult.Error = NewGatewayError(
+				"status",
+				resp.StatusCode(),
+				"failed to get registration status",
+				ErrSignalFailed,
+			)
+		}
+	default:
+		webResult.Registration = result.Signal.Generic.Registration
 	}
 
 	return webResult, nil

@@ -141,18 +141,18 @@ func (n *NokiaGateway) getCredentials(
 		SetFormData(reqParams).
 		Post(reqURL)
 	if err != nil {
-		return nil, NewAuthError(0, err.Error())
+		return nil, NewAuthError(0, "login request failed", err)
 	}
 
 	if resp.IsError() {
-		return nil, NewAuthError(resp.StatusCode(), resp.String())
+		return nil, NewAuthError(resp.StatusCode(), resp.String(), nil)
 	}
 
 	var authErr error
 	if loginResp.hasCredentials() {
 		authErr = nil
 	} else {
-		authErr = NewAuthError(0, "no valid credentials returned")
+		authErr = NewAuthError(0, "no valid credentials returned", nil)
 	}
 
 	return &loginResp, authErr

@@ -21,23 +21,30 @@ var (
 type AuthenticationError struct {
 	Status  int
 	Message string
+	Err     error
 }
 
 func (e *AuthenticationError) Error() string {
+	msg := "authentication failed: " + e.Message
 	if e.Status > 0 {
-		return fmt.Sprintf("authentication failed: %s (status %d)", e.Message, e.Status)
+		msg = fmt.Sprintf("%s (status %d)", msg, e.Status)
 	}
 
-	return "authentication failed: " + e.Message
+	if e.Err != nil {
+		msg = fmt.Sprintf("%s: %v", msg, e.Err)
+	}
+
+	return msg
 }
 
-// Is checks if the target error matches ErrAuthentication.
+// Is matches ErrAuthentication so callers can use errors.Is with the sentinel.
 func (*AuthenticationError) Is(target error) bool {
 	return target == ErrAuthentication
 }
 
-func (*AuthenticationError) Unwrap() error {
-	return ErrAuthentication
+// Unwrap returns the underlying cause, if any.
+func (e *AuthenticationError) Unwrap() error {
+	return e.Err
 }
 
 // GatewayError represents a gateway operation failure.
@@ -64,11 +71,12 @@ func (e *GatewayError) Unwrap() error {
 	return e.Err
 }
 
-// NewAuthError creates a new AuthenticationError.
-func NewAuthError(status int, message string) error {
+// NewAuthError creates a new AuthenticationError wrapping an optional cause.
+func NewAuthError(status int, message string, err error) error {
 	return &AuthenticationError{
 		Status:  status,
 		Message: message,
+		Err:     err,
 	}
 }
 

@@ -63,11 +63,11 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 	}
 
 	if resp.IsError() {
-		return NewAuthError(resp.StatusCode(), resp.String())
+		return NewAuthError(resp.StatusCode(), resp.String(), nil)
 	}
 
 	if loginResp.Auth.Token == "" {
-		return NewAuthError(0, "login response missing auth token")
+		return NewAuthError(0, "login response missing auth token", nil)
 	}
 
 	a.credentials = arcadianLoginData{

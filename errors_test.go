@@ -35,11 +35,16 @@ func TestAuthenticationError(t *testing.T) {
 		assert.ErrorIs(t, err, ErrAuthentication)
 	})
 
-	t.Run("Unwrap returns sentinel", func(t *testing.T) {
+	t.Run("Unwrap returns cause", func(t *testing.T) {
+		cause := errors.New("connection refused")
 		err := &AuthenticationError{
 			Message: "failed",
+			Err:     cause,
 		}
-		assert.Equal(t, ErrAuthentication, errors.Unwrap(err))
+		assert.Equal(t, cause, errors.Unwrap(err))
+		require.ErrorIs(t, err, cause)
+		require.ErrorIs(t, err, ErrAuthentication)
+		assert.Contains(t, err.Error(), "connection refused")
 	})
 }
 
@@ -87,13 +92,15 @@ func TestGatewayError(t *testing.T) {
 }
 
 func TestNewAuthError(t *testing.T) {
-	err := NewAuthError(http.StatusUnauthorized, "invalid token")
+	cause := errors.New("network timeout")
+	err := NewAuthError(http.StatusUnauthorized, "invalid token", cause)
 	require.Error(t, err)
 
 	authErr, ok := errors.AsType[*AuthenticationError](err)
 	require.True(t, ok)
 	assert.Equal(t, http.StatusUnauthorized, authErr.Status)
 	assert.Equal(t, "invalid token", authErr.Message)
+	assert.Equal(t, cause, authErr.Err)
 }
 
 func TestNewGatewayError(t *testing.T) {

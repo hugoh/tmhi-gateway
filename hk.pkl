@@ -21,7 +21,7 @@ local linters = new Mapping<String, Step> {
     check = "cog check --from-latest-tag"
   }
   ["duplication"] = {
-    check = "jscpd"
+    check = "cpd"
   }
 }
 

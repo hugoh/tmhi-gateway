@@ -18,7 +18,7 @@ func base64urlEscape(b64 string) string {
 // sha256Hash computes SHA256 hash of val1:val2 and returns base64 encoding.
 func sha256Hash(val1, val2 string) string {
 	h := sha256.New()
-	h.Write(fmt.Appendf(nil, "%s:%s", val1, val2))
+	_, _ = fmt.Fprintf(h, "%s:%s", val1, val2)
 
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
@@ -33,11 +33,8 @@ func random16bytes() string {
 	const length = 16
 
 	bytes := make([]byte, length)
-
-	_, err := rand.Read(bytes)
-	if err != nil {
-		return ""
-	}
+	// crypto/rand.Read never returns an error (Go 1.24+).
+	_, _ = rand.Read(bytes)
 
 	return base64urlEscape(base64.StdEncoding.EncodeToString(bytes))
 }

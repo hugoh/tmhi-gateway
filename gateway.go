@@ -3,11 +3,15 @@ package tmhi
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/go-resty/resty/v2"
 )
 
 // Gateway defines the interface for T-Mobile gateway implementations.
+//
+// Implementations are not safe for concurrent use: Login mutates shared
+// client state such as auth headers and cookies.
 type Gateway interface {
 	Login(ctx context.Context) error
 	Reboot(ctx context.Context) error
@@ -25,8 +29,14 @@ type GatewayCommon struct {
 
 // NewGatewayCommon creates a new GatewayCommon with the given configuration.
 func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
+	host := cfg.Host
+	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		// Bare IPv6 literals must be bracketed in URLs.
+		host = "[" + host + "]"
+	}
+
 	client := resty.New()
-	client.SetBaseURL("http://" + cfg.IP)
+	client.SetBaseURL("http://" + host)
 	client.SetTimeout(cfg.Timeout)
 
 	if cfg.Retries > 0 {

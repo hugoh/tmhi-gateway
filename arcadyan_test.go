@@ -19,7 +19,7 @@ func newArcadyan(gc *GatewayCommon, token string, exp time.Time) *ArcadyanGatewa
 	if token != "" {
 		ag.credentials = arcadianLoginData{
 			Token:      token,
-			Expiration: int(exp.Unix()),
+			Expiration: exp.Unix(),
 		}
 	}
 
@@ -42,7 +42,7 @@ func TestArcadyanGateway_Login_Success(t *testing.T) {
 
 	err := gw.Login(t.Context())
 	require.NoError(t, err)
-	assert.Equal(t, 1234567890, gw.credentials.Expiration)
+	assert.Equal(t, int64(1234567890), gw.credentials.Expiration)
 	assert.Equal(t, "testtoken", gw.credentials.Token)
 }
 
@@ -69,7 +69,7 @@ func TestArcadyanGateway_Reboot_Failure(t *testing.T) {
 func TestArcadyanGateway_Reboot_DryRun(t *testing.T) {
 	cfg := &GatewayConfig{Username: testUsername, Password: testPassword, DryRun: true}
 	gc := &GatewayCommon{
-		client: resty.NewWithClient(&http.Client{}).SetBaseURL("http://" + cfg.IP),
+		client: resty.NewWithClient(&http.Client{}).SetBaseURL("http://" + cfg.Host),
 		config: cfg,
 	}
 	gw := newArcadyan(gc, "valid-token", time.Now().Add(1*time.Hour))
@@ -126,7 +126,7 @@ func TestArcadyanGateway_Login_Errors(t *testing.T) {
 
 				return gw
 			},
-			errorContains: []string{"failed to decode login response"},
+			errorContains: []string{"login request failed", "invalid character"},
 		},
 		{
 			name: "HTTP client error",
@@ -189,7 +189,7 @@ func TestArcadyanGateway_isLoggedIn(t *testing.T) {
 		gw := &ArcadyanGateway{
 			GatewayCommon: &GatewayCommon{config: &GatewayConfig{}},
 			credentials: arcadianLoginData{
-				Expiration: int(time.Now().Add(1 * time.Hour).Unix()),
+				Expiration: time.Now().Add(1 * time.Hour).Unix(),
 				Token:      "valid",
 			},
 		}
@@ -200,7 +200,7 @@ func TestArcadyanGateway_isLoggedIn(t *testing.T) {
 		gw := &ArcadyanGateway{
 			GatewayCommon: &GatewayCommon{config: &GatewayConfig{}},
 			credentials: arcadianLoginData{
-				Expiration: int(time.Now().Add(-1 * time.Hour).Unix()),
+				Expiration: time.Now().Add(-1 * time.Hour).Unix(),
 				Token:      "expired",
 			},
 		}
@@ -214,7 +214,7 @@ func TestArcadyanGateway_isLoggedIn(t *testing.T) {
 }
 
 func TestNewArcadyanGateway(t *testing.T) {
-	cfg := &GatewayConfig{IP: testIP}
+	cfg := &GatewayConfig{Host: testIP}
 	gw := NewArcadyanGateway(cfg)
 	assert.NotNil(t, gw)
 	assert.NotNil(t, gw.client)
@@ -591,7 +591,7 @@ func TestArcadyanGateway_Login_AlreadyLoggedIn(t *testing.T) {
 		GatewayCommon: &GatewayCommon{},
 		credentials: arcadianLoginData{
 			Token:      "existing-token",
-			Expiration: int(time.Now().Add(1 * time.Hour).Unix()),
+			Expiration: time.Now().Add(1 * time.Hour).Unix(),
 		},
 	}
 

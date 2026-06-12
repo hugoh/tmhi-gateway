@@ -29,7 +29,7 @@ func testCommon(ts *httptest.Server) *GatewayCommon {
 
 func TestNewGatewayCommon(t *testing.T) {
 	cfg := &GatewayConfig{
-		IP:      testIP,
+		Host:    testIP,
 		Timeout: 5 * time.Second,
 		Retries: 3,
 		Debug:   true,
@@ -38,6 +38,26 @@ func TestNewGatewayCommon(t *testing.T) {
 
 	assert.NotNil(t, gc.client)
 	assert.Equal(t, cfg, gc.config)
+}
+
+func TestNewGatewayCommon_HostForms(t *testing.T) {
+	cases := []struct {
+		host string
+		want string
+	}{
+		{host: "192.168.12.1", want: "http://192.168.12.1"},
+		{host: "gateway.local", want: "http://gateway.local"},
+		{host: "192.168.12.1:8080", want: "http://192.168.12.1:8080"},
+		{host: "fd00::1", want: "http://[fd00::1]"},
+		{host: "[fd00::1]:8080", want: "http://[fd00::1]:8080"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.host, func(t *testing.T) {
+			gc := NewGatewayCommon(&GatewayConfig{Host: tc.host})
+			assert.Equal(t, tc.want, gc.client.BaseURL)
+		})
+	}
 }
 
 func TestCheckWebInterface(t *testing.T) {
@@ -111,14 +131,14 @@ func TestCheckWebInterface(t *testing.T) {
 
 func testConfig(ts *httptest.Server) *GatewayConfig {
 	return &GatewayConfig{
-		IP:       strings.TrimPrefix(ts.URL, "http://"),
+		Host:     strings.TrimPrefix(ts.URL, "http://"),
 		Username: testUsername,
 		Password: testPassword,
 	}
 }
 
 func testConfigNoCreds(ts *httptest.Server) *GatewayConfig {
-	return &GatewayConfig{IP: strings.TrimPrefix(ts.URL, "http://")}
+	return &GatewayConfig{Host: strings.TrimPrefix(ts.URL, "http://")}
 }
 
 func jsonResponder(status int, body string) http.HandlerFunc {

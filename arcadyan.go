@@ -23,9 +23,13 @@ type ArcadyanGateway struct {
 }
 
 type arcadianLoginData struct {
-	Expiration int
+	Expiration int64
 	Token      string
 }
+
+// expirationMargin re-authenticates slightly before token expiry so a
+// token cannot lapse mid-request.
+const expirationMargin = 30 * time.Second
 
 // NewArcadyanGateway creates a new Arcadyan gateway instance.
 func NewArcadyanGateway(cfg *GatewayConfig) *ArcadyanGateway {
@@ -50,7 +54,7 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 
 	var loginResp struct {
 		Auth struct {
-			Expiration       int
+			Expiration       int64
 			RefreshCountLeft int
 			RefreshCountMax  int
 			Token            string
@@ -59,15 +63,15 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 
 	resp, err := a.client.R().SetContext(ctx).SetResult(&loginResp).SetBody(bodyMap).Post(reqPath)
 	if err != nil {
-		return fmt.Errorf("login request failed: failed to decode login response: %w", err)
+		return fmt.Errorf("login request failed: %w", err)
 	}
 
 	if resp.IsError() {
-		return NewAuthError(resp.StatusCode(), resp.String())
+		return NewAuthError(resp.StatusCode(), resp.String(), nil)
 	}
 
 	if loginResp.Auth.Token == "" {
-		return NewAuthError(0, "login response missing auth token")
+		return NewAuthError(0, "login response missing auth token", nil)
 	}
 
 	a.credentials = arcadianLoginData{
@@ -146,29 +150,26 @@ func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 		}
 	}
 
+	webResult.Registration = "unknown"
+
 	resp, err := a.client.R().SetContext(ctx).SetResult(&result).Get(infoURL)
-	if err != nil {
-		return &StatusResult{
-			WebInterfaceUp: webResult.WebInterfaceUp,
-			StatusCode:     webResult.StatusCode,
-			Error:          NewGatewayError("status", 0, "failed to get registration status", err),
-		}, nil
-	}
 
-	regStatus := "unknown"
-	if resp.IsSuccess() {
-		regStatus = result.Signal.Generic.Registration
-	}
-
-	webResult.Registration = regStatus
-
-	if resp.IsError() {
-		webResult.Error = NewGatewayError(
-			"status",
-			resp.StatusCode(),
-			ErrSignalFailed.Error(),
-			ErrSignalFailed,
-		)
+	switch {
+	case err != nil:
+		if webResult.Error == nil {
+			webResult.Error = NewGatewayError("status", 0, "failed to get registration status", err)
+		}
+	case resp.IsError():
+		if webResult.Error == nil {
+			webResult.Error = NewGatewayError(
+				"status",
+				resp.StatusCode(),
+				"failed to get registration status",
+				ErrSignalFailed,
+			)
+		}
+	default:
+		webResult.Registration = result.Signal.Generic.Registration
 	}
 
 	return webResult, nil
@@ -177,7 +178,7 @@ func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 // Signal retrieves signal strength information.
 func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
 	var result struct {
-		Signal signalResult
+		Signal SignalResult
 	}
 
 	resp, err := a.client.R().SetContext(ctx).SetResult(&result).Get(infoURL)
@@ -189,94 +190,16 @@ func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
 		return nil, NewGatewayError(
 			"signal",
 			resp.StatusCode(),
-			ErrSignalFailed.Error(),
+			"failed to get signal info",
 			ErrSignalFailed,
 		)
 	}
 
-	return convertSignalResult(result.Signal), nil
-}
-
-type signalResult struct {
-	FourG   *fourGSignal `json:"4g"`
-	FiveG   *fiveGSignal `json:"5g"`
-	Generic struct {
-		APN          string
-		HasIPv6      bool
-		Registration string
-		Roaming      bool
-	}
-}
-
-type fourGSignal struct {
-	signalData
-
-	ENBID int
-}
-
-type fiveGSignal struct {
-	signalData
-
-	AntennaUsed string
-	GNBID       int
-}
-
-type signalData struct {
-	Bands []string
-	Bars  float64
-	CID   int
-	RSRP  int
-	RSRQ  int
-	RSSI  int
-	SINR  int
-}
-
-func convertSignalResult(sig signalResult) *SignalResult {
-	result := &SignalResult{
-		Generic: GenericSignalInfo{
-			APN:          sig.Generic.APN,
-			HasIPv6:      sig.Generic.HasIPv6,
-			Registration: sig.Generic.Registration,
-			Roaming:      sig.Generic.Roaming,
-		},
-	}
-
-	if sig.FourG != nil {
-		result.FourG = &FourGSignal{
-			SignalData: SignalData{
-				Bands: sig.FourG.Bands,
-				Bars:  sig.FourG.Bars,
-				CID:   sig.FourG.CID,
-				RSRP:  sig.FourG.RSRP,
-				RSRQ:  sig.FourG.RSRQ,
-				RSSI:  sig.FourG.RSSI,
-				SINR:  sig.FourG.SINR,
-			},
-			ENBID: sig.FourG.ENBID,
-		}
-	}
-
-	if sig.FiveG != nil {
-		result.FiveG = &FiveGSignal{
-			SignalData: SignalData{
-				Bands: sig.FiveG.Bands,
-				Bars:  sig.FiveG.Bars,
-				CID:   sig.FiveG.CID,
-				RSRP:  sig.FiveG.RSRP,
-				RSRQ:  sig.FiveG.RSRQ,
-				RSSI:  sig.FiveG.RSSI,
-				SINR:  sig.FiveG.SINR,
-			},
-			AntennaUsed: sig.FiveG.AntennaUsed,
-			GNBID:       sig.FiveG.GNBID,
-		}
-	}
-
-	return result
+	return &result.Signal, nil
 }
 
 func (a *ArcadyanGateway) isLoggedIn() bool {
-	now := int(time.Now().Unix())
+	deadline := time.Now().Add(expirationMargin).Unix()
 
-	return a.credentials.Token != "" && a.credentials.Expiration > now
+	return a.credentials.Token != "" && a.credentials.Expiration > deadline
 }

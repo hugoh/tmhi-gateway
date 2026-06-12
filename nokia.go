@@ -161,12 +161,16 @@ func (n *NokiaGateway) getCredentials(
 func (n *NokiaGateway) getNonce(ctx context.Context) (*nonceResp, error) {
 	var result nonceResp
 
-	_, err := n.client.R().
+	resp, err := n.client.R().
 		SetContext(ctx).
 		SetResult(&result).
 		Get("/login_web_app.cgi?" + nonceParam)
 	if err != nil {
 		return nil, fmt.Errorf("error getting nonce: %w", err)
+	}
+
+	if resp.IsError() {
+		return nil, NewGatewayError("nonce", resp.StatusCode(), resp.String(), ErrAuthentication)
 	}
 
 	return &result, nil

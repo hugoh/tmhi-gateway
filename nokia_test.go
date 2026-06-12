@@ -136,6 +136,15 @@ func TestNokiaGateway_getNonce_ErrorResponse(t *testing.T) {
 	assert.Contains(t, err.Error(), "error getting nonce")
 }
 
+func TestNokiaGateway_getNonce_ErrorStatus(t *testing.T) {
+	ts := newTestServer(t, textResponder(http.StatusInternalServerError, "server error"))
+	gw := nokiaTestGw(ts, &GatewayConfig{}, "", "")
+
+	_, err := gw.getNonce(t.Context())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrAuthentication)
+}
+
 func TestNokiaGateway_getNonce_Success(t *testing.T) {
 	ts := newTestServer(t, jsonResponder(http.StatusOK, testNonceBody))
 	gw := nokiaTestGw(ts, &GatewayConfig{}, "", "")

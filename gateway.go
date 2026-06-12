@@ -3,6 +3,7 @@ package tmhi
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -28,8 +29,14 @@ type GatewayCommon struct {
 
 // NewGatewayCommon creates a new GatewayCommon with the given configuration.
 func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
+	host := cfg.Host
+	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
+		// Bare IPv6 literals must be bracketed in URLs.
+		host = "[" + host + "]"
+	}
+
 	client := resty.New()
-	client.SetBaseURL("http://" + cfg.IP)
+	client.SetBaseURL("http://" + host)
 	client.SetTimeout(cfg.Timeout)
 
 	if cfg.Retries > 0 {

@@ -69,7 +69,7 @@ func TestArcadyanGateway_Reboot_Failure(t *testing.T) {
 func TestArcadyanGateway_Reboot_DryRun(t *testing.T) {
 	cfg := &GatewayConfig{Username: testUsername, Password: testPassword, DryRun: true}
 	gc := &GatewayCommon{
-		client: resty.NewWithClient(&http.Client{}).SetBaseURL("http://" + cfg.IP),
+		client: resty.NewWithClient(&http.Client{}).SetBaseURL("http://" + cfg.Host),
 		config: cfg,
 	}
 	gw := newArcadyan(gc, "valid-token", time.Now().Add(1*time.Hour))
@@ -214,7 +214,7 @@ func TestArcadyanGateway_isLoggedIn(t *testing.T) {
 }
 
 func TestNewArcadyanGateway(t *testing.T) {
-	cfg := &GatewayConfig{IP: testIP}
+	cfg := &GatewayConfig{Host: testIP}
 	gw := NewArcadyanGateway(cfg)
 	assert.NotNil(t, gw)
 	assert.NotNil(t, gw.client)

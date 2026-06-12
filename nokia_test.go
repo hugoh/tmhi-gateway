@@ -32,7 +32,7 @@ func newNokia(gc *GatewayCommon, sid, token string) *NokiaGateway {
 
 func nokiaConfig(ts *httptest.Server) *GatewayConfig {
 	return &GatewayConfig{
-		IP:       strings.TrimPrefix(ts.URL, "http://"),
+		Host:     strings.TrimPrefix(ts.URL, "http://"),
 		Username: testUsername,
 		Password: testPassword,
 	}
@@ -305,7 +305,7 @@ func TestNokiaGateway_NotImplemented(t *testing.T) {
 }
 
 func TestNewNokiaGateway(t *testing.T) {
-	cfg := &GatewayConfig{IP: testIP}
+	cfg := &GatewayConfig{Host: testIP}
 	gw := NewNokiaGateway(cfg)
 	assert.NotNil(t, gw)
 	assert.NotNil(t, gw.client)

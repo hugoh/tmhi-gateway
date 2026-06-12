@@ -1,4 +1,4 @@
-module github.com/hugoh/tmhi-gateway
+module github.com/hugoh/tmhi-gateway/v2
 
 go 1.26.0
 

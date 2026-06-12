@@ -63,7 +63,7 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 
 	resp, err := a.client.R().SetContext(ctx).SetResult(&loginResp).SetBody(bodyMap).Post(reqPath)
 	if err != nil {
-		return fmt.Errorf("login request failed: failed to decode login response: %w", err)
+		return fmt.Errorf("login request failed: %w", err)
 	}
 
 	if resp.IsError() {

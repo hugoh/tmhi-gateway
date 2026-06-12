@@ -8,6 +8,9 @@ import (
 )
 
 // Gateway defines the interface for T-Mobile gateway implementations.
+//
+// Implementations are not safe for concurrent use: Login mutates shared
+// client state such as auth headers and cookies.
 type Gateway interface {
 	Login(ctx context.Context) error
 	Reboot(ctx context.Context) error

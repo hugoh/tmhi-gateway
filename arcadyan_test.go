@@ -126,7 +126,7 @@ func TestArcadyanGateway_Login_Errors(t *testing.T) {
 
 				return gw
 			},
-			errorContains: []string{"failed to decode login response"},
+			errorContains: []string{"login request failed", "invalid character"},
 		},
 		{
 			name: "HTTP client error",

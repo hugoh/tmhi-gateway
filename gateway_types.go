@@ -48,6 +48,10 @@ type SignalResult struct {
 }
 
 // StatusResult contains status check result.
+//
+// A status check returns a partial result rather than failing outright:
+// Error records what went wrong while the other fields keep whatever
+// could still be determined.
 type StatusResult struct {
 	WebInterfaceUp bool
 	StatusCode     int

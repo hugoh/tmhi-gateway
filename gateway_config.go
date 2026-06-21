@@ -11,6 +11,9 @@ type GatewayConfig struct {
 	Password string
 	Timeout  time.Duration
 	Retries  int
-	DryRun   bool
-	Debug    bool
+	DryRun    bool
+	Debug     bool
+	// UserAgent overrides the User-Agent header sent with every request.
+	// Defaults to "tmhi-gateway/v2" when empty.
+	UserAgent string
 }

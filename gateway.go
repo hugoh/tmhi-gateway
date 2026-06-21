@@ -22,6 +22,8 @@ type Gateway interface {
 	Signal(ctx context.Context) (*SignalResult, error)
 }
 
+const defaultUserAgent = "tmhi-gateway/v2"
+
 // GatewayCommon provides shared functionality for gateway implementations.
 type GatewayCommon struct {
 	client *resty.Client
@@ -42,6 +44,12 @@ func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
 	client := resty.New()
 	client.SetBaseURL("http://" + host)
 	client.SetTimeout(cfg.Timeout)
+
+	ua := cfg.UserAgent
+	if ua == "" {
+		ua = defaultUserAgent
+	}
+	client.SetHeader("User-Agent", ua)
 
 	if cfg.Retries > 0 {
 		client.SetRetryCount(cfg.Retries)

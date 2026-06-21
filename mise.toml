@@ -115,7 +115,7 @@ run = "go mod tidy -v"
 [tasks.build]
 description = "Build application"
 sources = ["**/*.go", "go.mod", "go.sum"]
-run = "go build -o dist/$(basename $(go list -m)) ."
+run = "go build -o dist/$(basename $(go list -m | sed -E 's|/v[0-9]+$||')) ."
 
 [tasks.dev]
 description = "Development mode: run tests in watch mode"

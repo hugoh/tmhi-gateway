@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/go-resty/resty/v2"
 )
@@ -30,8 +31,11 @@ type GatewayCommon struct {
 // NewGatewayCommon creates a new GatewayCommon with the given configuration.
 func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
 	host := cfg.Host
-	if ip := net.ParseIP(host); ip != nil && ip.To4() == nil {
-		// Bare IPv6 literals must be bracketed in URLs.
+	// Bare IPv6 literals must be bracketed in URLs.
+	// Use ContainsRune(':') rather than To4()==nil so IPv4-mapped IPv6
+	// addresses (::ffff:x.x.x.x) are bracketed correctly — To4() returns
+	// non-nil for those, which would incorrectly skip the bracket.
+	if net.ParseIP(host) != nil && strings.ContainsRune(host, ':') {
 		host = "[" + host + "]"
 	}
 

@@ -50,6 +50,7 @@ func TestNewGatewayCommon_HostForms(t *testing.T) {
 		{host: "192.168.12.1:8080", want: "http://192.168.12.1:8080"},
 		{host: "fd00::1", want: "http://[fd00::1]"},
 		{host: "[fd00::1]:8080", want: "http://[fd00::1]:8080"},
+		{host: "::ffff:192.0.2.1", want: "http://[::ffff:192.0.2.1]"},
 	}
 
 	for _, tc := range cases {

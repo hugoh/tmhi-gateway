@@ -118,8 +118,8 @@ sources = ["**/*.go", "go.mod", "go.sum"]
 run = "go build -o dist/$(basename $(go list -m)) ."
 
 [tasks.dev]
-description = "Development mode"
-run = "go run ."
+description = "Development mode: run tests in watch mode"
+run = "gotestsum --watch ./..."
 
 [tasks.depup]
 description = "Upgrade dependencies"

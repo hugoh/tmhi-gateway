@@ -154,15 +154,6 @@ func (a *ArcadyanGateway) Request(ctx context.Context, method, path string) (*In
 // Status checks the gateway connection status.
 func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 	webResult := a.CheckWebInterface(ctx)
-	webResult.Registration = "unknown"
-
-	if err := a.Login(ctx); err != nil {
-		if webResult.Error == nil {
-			webResult.Error = fmt.Errorf("login: %w", err)
-		}
-
-		return webResult, nil
-	}
 
 	var result struct {
 		Signal struct {
@@ -171,6 +162,8 @@ func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 			}
 		}
 	}
+
+	webResult.Registration = "unknown"
 
 	resp, err := a.client.R().SetContext(ctx).SetResult(&result).Get(infoURL)
 
@@ -197,10 +190,6 @@ func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 
 // Signal retrieves signal strength information.
 func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
-	if err := a.Login(ctx); err != nil {
-		return nil, fmt.Errorf("cannot get signal without successful login flow: %w", err)
-	}
-
 	var result struct {
 		Signal SignalResult
 	}

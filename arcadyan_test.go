@@ -309,6 +309,39 @@ func TestArcadyanGateway_Status_Error(t *testing.T) {
 	assert.Error(t, result.Error)
 }
 
+func TestArcadyanGateway_Status_LoginFailure(t *testing.T) {
+	// Web interface is up but login fails; error should be captured in StatusResult.
+	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		// login endpoint and infoURL both return 401
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("unauthorized"))
+	})
+
+	gw := newArcadyan(testCommon(ts), "", time.Time{})
+	gw.config = testConfig(ts)
+
+	result, err := gw.Status(t.Context())
+	require.NoError(t, err)
+	assert.True(t, result.WebInterfaceUp, "web interface up even when login fails")
+	assert.Error(t, result.Error)
+	assert.ErrorIs(t, result.Error, ErrAuthentication)
+}
+
+func TestArcadyanGateway_Signal_LoginFailure(t *testing.T) {
+	ts := newTestServer(t, textResponder(http.StatusUnauthorized, "unauthorized"))
+
+	gw := newArcadyan(testCommon(ts), "", time.Time{})
+	gw.config = testConfig(ts)
+
+	_, err := gw.Signal(t.Context())
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrAuthentication)
+}
+
 func TestArcadyanGateway_Request_ErrorStatus(t *testing.T) {
 	cases := []struct{ name string; status int }{
 		{"unauthorized", http.StatusUnauthorized},

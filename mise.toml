@@ -42,7 +42,7 @@ run = "golangci-lint run ${usage_fix:+--fix} ./..."
 
 [tasks."lint:release"]
 description = "Check release config if present"
-run = "test -f .goreleaser.yml && goreleaser check || true"
+run = "test ! -f .goreleaser.yml || goreleaser check"
 
 [tasks.lint]
 description = "Lint code, check dead code"

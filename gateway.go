@@ -6,7 +6,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/go-resty/resty/v2"
+	"resty.dev/v3"
 )
 
 // Gateway defines the interface for T-Mobile gateway implementations.
@@ -14,6 +14,7 @@ import (
 // Implementations are not safe for concurrent use: Login mutates shared
 // client state such as auth headers and cookies.
 type Gateway interface {
+	Close() error
 	Login(ctx context.Context) error
 	Reboot(ctx context.Context) error
 	Request(ctx context.Context, method, path string) (*InfoResult, error)
@@ -54,6 +55,7 @@ func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
 
 	if cfg.Retries > 0 {
 		client.SetRetryCount(cfg.Retries)
+		client.SetRetryAllowNonIdempotent(true)
 	}
 
 	if cfg.Debug {
@@ -64,6 +66,15 @@ func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
 		client: client,
 		config: cfg,
 	}
+}
+
+// Close releases resources held by the underlying HTTP client.
+func (gc *GatewayCommon) Close() error {
+	if err := gc.client.Close(); err != nil {
+		return fmt.Errorf("close client: %w", err)
+	}
+
+	return nil
 }
 
 // CheckWebInterface checks if the gateway web interface is accessible.
@@ -79,7 +90,7 @@ func (gc *GatewayCommon) CheckWebInterface(ctx context.Context) *StatusResult {
 	}
 
 	result.StatusCode = resp.StatusCode()
-	result.WebInterfaceUp = resp.IsSuccess()
+	result.WebInterfaceUp = resp.IsStatusSuccess()
 
 	return result
 }

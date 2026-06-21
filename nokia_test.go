@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"resty.dev/v3"
 )
 
 const (
@@ -331,25 +331,37 @@ func TestNokiaGateway_NotImplemented(t *testing.T) {
 	})
 }
 
-func TestNokiaGateway_logout_ClearsCookie(t *testing.T) {
-	ts := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
-	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
-	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
-	gw.client.SetCookie(&http.Cookie{Name: sidCookieName, Value: testValidSID})
+func TestNokiaGateway_logout_ClearsCredentials(t *testing.T) {
+	gw := newNokia(&GatewayCommon{config: &GatewayConfig{}}, testValidSID, testValidToken)
 
 	gw.logout()
 
 	assert.False(t, gw.isLoggedIn(), "logout should clear credentials")
-	assert.Empty(t, gw.client.Cookies, "logout should clear all resty cookies")
 }
 
-func TestNokiaGateway_Reboot_ReloginNoDuplicateCookie(t *testing.T) {
-	// After reboot (which calls logout), a subsequent Login should not
-	// accumulate a second sid cookie from the previous session.
-	callCount := 0
+func TestNokiaGateway_Reboot_SendsSIDCookie(t *testing.T) {
+	// Reboot must include the current session SID in the request cookie.
+	var gotCookie string
+
+	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		if r.Method == http.MethodPost && r.URL.Path == "/reboot_web_app.cgi" {
+			if c, err := r.Cookie(sidCookieName); err == nil {
+				gotCookie = c.Value
+			}
+		}
+	})
+
+	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
+
+	require.NoError(t, gw.Reboot(t.Context()))
+	assert.Equal(t, testValidSID, gotCookie, "reboot request must carry the session SID cookie")
+}
+
+func TestNokiaGateway_Reboot_ReloginHasFreshSID(t *testing.T) {
+	// After reboot (which calls logout), a subsequent Login must use fresh credentials,
+	// not carry over the old SID.
 	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -358,34 +370,22 @@ func TestNokiaGateway_Reboot_ReloginNoDuplicateCookie(t *testing.T) {
 		case r.Method == http.MethodGet:
 			_, _ = w.Write([]byte(testNonceBody))
 		case r.Method == http.MethodPost && r.URL.Path == loginWebAppCGI:
-			callCount++
 			_, _ = w.Write([]byte(testLoginRespBody))
-		case r.Method == http.MethodPost && r.URL.Path == "/reboot_web_app.cgi":
-			// pass
 		}
 	})
 
 	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
-	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
-	gw.client.SetCookie(&http.Cookie{Name: sidCookieName, Value: testValidSID})
 
 	require.NoError(t, gw.Reboot(t.Context()))
 	require.NoError(t, gw.Login(t.Context()))
 
-	sidCookies := 0
-
-	for _, c := range gw.client.Cookies {
-		if c.Name == sidCookieName {
-			sidCookies++
-		}
-	}
-
 	assert.Equal(
 		t,
-		1,
-		sidCookies,
-		"re-login after reboot must not accumulate duplicate sid cookies",
+		"testSid",
+		gw.credentials.SID,
+		"re-login after reboot must have fresh SID, not the old one",
 	)
+	assert.NotEqual(t, testValidSID, gw.credentials.SID)
 }
 
 func TestNewNokiaGateway(t *testing.T) {

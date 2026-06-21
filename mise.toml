@@ -78,7 +78,7 @@ run = "go-test-coverage -config .testcoverage.yml"
 
 [tasks.ci-core]
 description = "Run core CI checks (test, coverage, integration)"
-depends = ["test", "coverage", "test-int"]
+depends = ["coverage", "test-int"]
 
 [tasks.ci]
 description = "Run full CI pipeline (lint, tests, coverage, build)"

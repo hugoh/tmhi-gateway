@@ -69,7 +69,7 @@ run = "gotestsum -- -race -coverprofile=${COVEROUT} -covermode=atomic ./..."
 [tasks.test-int]
 description = "Run integration tests"
 sources = ["go.mod", "**/*.go"]
-run = "test -d internal && gotestsum -- -race -tags=integration ./internal/... || true"
+run = "test ! -d internal || gotestsum -- -race -tags=integration ./internal/..."
 
 [tasks.coverage]
 description = "Check test coverage"

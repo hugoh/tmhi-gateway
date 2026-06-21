@@ -3,8 +3,8 @@ module github.com/hugoh/tmhi-gateway/v3
 go 1.26.0
 
 require (
-	github.com/go-resty/resty/v2 v2.17.2
 	github.com/stretchr/testify v1.12.1
+	resty.dev/v3 v3.0.0-rc.2
 )
 
 require (

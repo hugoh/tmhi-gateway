@@ -67,7 +67,7 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 		return fmt.Errorf("login request failed: %w", err)
 	}
 
-	if resp.IsError() {
+	if resp.IsStatusFailure() {
 		return NewAuthError(resp.StatusCode(), resp.String(), nil)
 	}
 
@@ -102,7 +102,7 @@ func (a *ArcadyanGateway) Reboot(ctx context.Context) error {
 		return fmt.Errorf("reboot request failed: %w", err)
 	}
 
-	if resp.IsError() {
+	if resp.IsStatusFailure() {
 		status := resp.StatusCode()
 		if status == http.StatusUnauthorized || status == http.StatusForbidden {
 			a.logout()
@@ -129,12 +129,12 @@ func (a *ArcadyanGateway) Request(ctx context.Context, method, path string) (*In
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	if resp.IsError() {
+	if resp.IsStatusFailure() {
 		return nil, fmt.Errorf("%w: HTTP %d", ErrRequestFailed, resp.StatusCode())
 	}
 
 	contentType := resp.Header().Get("Content-Type")
-	body := resp.Body()
+	body := resp.Bytes()
 
 	var data map[string]any
 	if strings.HasPrefix(contentType, jsonContentType) {
@@ -172,7 +172,7 @@ func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 		if webResult.Error == nil {
 			webResult.Error = NewGatewayError("status", 0, "failed to get registration status", err)
 		}
-	case resp.IsError():
+	case resp.IsStatusFailure():
 		if webResult.Error == nil {
 			webResult.Error = NewGatewayError(
 				"status",
@@ -199,7 +199,7 @@ func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
 		return nil, NewGatewayError("signal", 0, "failed to get signal info", err)
 	}
 
-	if resp.IsError() {
+	if resp.IsStatusFailure() {
 		return nil, NewGatewayError(
 			"signal",
 			resp.StatusCode(),

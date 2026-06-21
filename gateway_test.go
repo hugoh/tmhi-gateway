@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
+	"resty.dev/v3"
 )
 
 const testServerErrMsg = "server error"
@@ -85,7 +85,7 @@ func TestNewGatewayCommon_HostForms(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.host, func(t *testing.T) {
 			gc := NewGatewayCommon(&GatewayConfig{Host: tc.host})
-			assert.Equal(t, tc.want, gc.client.BaseURL)
+			assert.Equal(t, tc.want, gc.client.BaseURL())
 		})
 	}
 }

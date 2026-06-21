@@ -81,8 +81,8 @@ func TestNokiaGateway_getCredentials_ErrorResponse(t *testing.T) {
 		ts   *httptest.Server
 	}{
 		{
-			name: "server error",
-			ts:   newTestServer(t, textResponder(http.StatusInternalServerError, "server error")),
+			name: testServerErrMsg,
+			ts:   newTestServer(t, textResponder(http.StatusInternalServerError, testServerErrMsg)),
 		},
 		{
 			name: "invalid credentials",
@@ -170,11 +170,13 @@ func TestNokiaGateway_getCredentials_NonceFormField(t *testing.T) {
 	// Nonce with chars that base64urlEscape would transform (+, =).
 	// The form field must echo the raw nonce so it matches what the hashes use.
 	const rawNonce = "abc+def/ghi="
+
 	var receivedNonce string
 
 	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		require.NoError(t, r.ParseForm())
+		assert.NoError(t, r.ParseForm())
 		receivedNonce = r.FormValue(nonceParam)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(testLoginRespBody))
@@ -183,7 +185,12 @@ func TestNokiaGateway_getCredentials_NonceFormField(t *testing.T) {
 	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
 	_, err := gw.getCredentials(t.Context(), nokiaNonce{Nonce: rawNonce, RandomKey: "key"})
 	require.NoError(t, err)
-	assert.Equal(t, rawNonce, receivedNonce, "nonce form field must be the raw value used in hashes")
+	assert.Equal(
+		t,
+		rawNonce,
+		receivedNonce,
+		"nonce form field must be the raw value used in hashes",
+	)
 }
 
 func TestNokiaGateway_getCredentials_Success(t *testing.T) {
@@ -282,7 +289,7 @@ func TestNokiaGateway_Login_Success(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(testNonceBody))
-		} else if r.Method == http.MethodPost && r.URL.Path == "/login_web_app.cgi" {
+		} else if r.Method == http.MethodPost && r.URL.Path == loginWebAppCGI {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(testLoginRespBody))
@@ -330,7 +337,8 @@ func TestNokiaGateway_logout_ClearsCookie(t *testing.T) {
 	})
 
 	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
-	gw.client.SetCookie(&http.Cookie{Name: "sid", Value: testValidSID})
+	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
+	gw.client.SetCookie(&http.Cookie{Name: sidCookieName, Value: testValidSID})
 
 	gw.logout()
 
@@ -345,10 +353,11 @@ func TestNokiaGateway_Reboot_ReloginNoDuplicateCookie(t *testing.T) {
 	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+
 		switch {
 		case r.Method == http.MethodGet:
 			_, _ = w.Write([]byte(testNonceBody))
-		case r.Method == http.MethodPost && r.URL.Path == "/login_web_app.cgi":
+		case r.Method == http.MethodPost && r.URL.Path == loginWebAppCGI:
 			callCount++
 			_, _ = w.Write([]byte(testLoginRespBody))
 		case r.Method == http.MethodPost && r.URL.Path == "/reboot_web_app.cgi":
@@ -357,18 +366,26 @@ func TestNokiaGateway_Reboot_ReloginNoDuplicateCookie(t *testing.T) {
 	})
 
 	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
-	gw.client.SetCookie(&http.Cookie{Name: "sid", Value: testValidSID})
+	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
+	gw.client.SetCookie(&http.Cookie{Name: sidCookieName, Value: testValidSID})
 
 	require.NoError(t, gw.Reboot(t.Context()))
 	require.NoError(t, gw.Login(t.Context()))
 
 	sidCookies := 0
+
 	for _, c := range gw.client.Cookies {
-		if c.Name == "sid" {
+		if c.Name == sidCookieName {
 			sidCookies++
 		}
 	}
-	assert.Equal(t, 1, sidCookies, "re-login after reboot must not accumulate duplicate sid cookies")
+
+	assert.Equal(
+		t,
+		1,
+		sidCookies,
+		"re-login after reboot must not accumulate duplicate sid cookies",
+	)
 }
 
 func TestNewNokiaGateway(t *testing.T) {

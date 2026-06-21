@@ -130,7 +130,7 @@ func (a *ArcadyanGateway) Request(ctx context.Context, method, path string) (*In
 	}
 
 	if resp.IsError() {
-		return nil, fmt.Errorf("request failed: HTTP %d", resp.StatusCode())
+		return nil, fmt.Errorf("%w: HTTP %d", ErrRequestFailed, resp.StatusCode())
 	}
 
 	contentType := resp.Header().Get("Content-Type")

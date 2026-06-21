@@ -1,8 +1,8 @@
 package tmhi
 
 import (
-	"fmt"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
@@ -314,6 +314,7 @@ func TestArcadyanGateway_Status_LoginFailure(t *testing.T) {
 	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead {
 			w.WriteHeader(http.StatusOK)
+
 			return
 		}
 		// login endpoint and infoURL both return 401
@@ -327,7 +328,7 @@ func TestArcadyanGateway_Status_LoginFailure(t *testing.T) {
 	result, err := gw.Status(t.Context())
 	require.NoError(t, err)
 	assert.True(t, result.WebInterfaceUp, "web interface up even when login fails")
-	assert.Error(t, result.Error)
+	require.Error(t, result.Error)
 	assert.ErrorIs(t, result.Error, ErrAuthentication)
 }
 
@@ -343,9 +344,12 @@ func TestArcadyanGateway_Signal_LoginFailure(t *testing.T) {
 }
 
 func TestArcadyanGateway_Request_ErrorStatus(t *testing.T) {
-	cases := []struct{ name string; status int }{
+	cases := []struct {
+		name   string
+		status int
+	}{
 		{"unauthorized", http.StatusUnauthorized},
-		{"server error", http.StatusInternalServerError},
+		{testServerErrMsg, http.StatusInternalServerError},
 	}
 
 	for _, tc := range cases {
@@ -358,7 +362,7 @@ func TestArcadyanGateway_Request_ErrorStatus(t *testing.T) {
 			result, err := gw.Request(t.Context(), "GET", "/test")
 			require.Error(t, err, "Request() must return an error for HTTP %d", tc.status)
 			assert.Nil(t, result)
-			assert.Contains(t, err.Error(), fmt.Sprintf("%d", tc.status))
+			assert.Contains(t, err.Error(), strconv.Itoa(tc.status))
 		})
 	}
 }

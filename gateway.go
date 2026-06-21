@@ -49,6 +49,7 @@ func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
 	if ua == "" {
 		ua = defaultUserAgent
 	}
+
 	client.SetHeader("User-Agent", ua)
 
 	if cfg.Retries > 0 {

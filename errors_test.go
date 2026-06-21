@@ -53,7 +53,7 @@ func TestGatewayError(t *testing.T) {
 		err := &GatewayError{
 			Op:         "login",
 			HTTPStatus: http.StatusInternalServerError,
-			Message:    "server error",
+			Message:    testServerErrMsg,
 			Err:        errors.New("connection timeout"),
 		}
 		assert.Contains(t, err.Error(), "login failed")

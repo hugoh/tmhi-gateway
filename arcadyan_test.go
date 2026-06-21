@@ -1,6 +1,7 @@
 package tmhi
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -306,6 +307,27 @@ func TestArcadyanGateway_Status_Error(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.WebInterfaceUp)
 	assert.Error(t, result.Error)
+}
+
+func TestArcadyanGateway_Request_ErrorStatus(t *testing.T) {
+	cases := []struct{ name string; status int }{
+		{"unauthorized", http.StatusUnauthorized},
+		{"server error", http.StatusInternalServerError},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := newTestServer(t, textResponder(tc.status, "error body"))
+
+			gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
+			gw.config = testConfigNoCreds(ts)
+
+			result, err := gw.Request(t.Context(), "GET", "/test")
+			require.Error(t, err, "Request() must return an error for HTTP %d", tc.status)
+			assert.Nil(t, result)
+			assert.Contains(t, err.Error(), fmt.Sprintf("%d", tc.status))
+		})
+	}
 }
 
 func TestArcadyanGateway_Request_Methods(t *testing.T) {

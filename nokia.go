@@ -127,12 +127,16 @@ func (n *NokiaGateway) isLoggedIn() bool {
 
 func (n *NokiaGateway) logout() {
 	n.credentials = nokiaLoginData{}
+	// resty.Client.SetCookie/SetCookies both append; assign directly to
+	// replace the slice so re-login doesn't accumulate stale sid cookies.
+	n.client.Cookies = nil
 }
 
 func (n *NokiaGateway) getCredentials(
 	ctx context.Context,
 	nonce nokiaNonce,
 ) (*nokiaLoginResp, error) {
+	// The Nokia gateway normalizes the password to lowercase before verification.
 	passHashInput := strings.ToLower(n.config.Password)
 	userPassHash := sha256Hash(n.config.Username, passHashInput)
 	userPassNonceHash := sha256URL(userPassHash, nonce.Nonce)

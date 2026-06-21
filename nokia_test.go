@@ -324,6 +324,53 @@ func TestNokiaGateway_NotImplemented(t *testing.T) {
 	})
 }
 
+func TestNokiaGateway_logout_ClearsCookie(t *testing.T) {
+	ts := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
+	gw.client.SetCookie(&http.Cookie{Name: "sid", Value: testValidSID})
+
+	gw.logout()
+
+	assert.False(t, gw.isLoggedIn(), "logout should clear credentials")
+	assert.Empty(t, gw.client.Cookies, "logout should clear all resty cookies")
+}
+
+func TestNokiaGateway_Reboot_ReloginNoDuplicateCookie(t *testing.T) {
+	// After reboot (which calls logout), a subsequent Login should not
+	// accumulate a second sid cookie from the previous session.
+	callCount := 0
+	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		switch {
+		case r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(testNonceBody))
+		case r.Method == http.MethodPost && r.URL.Path == "/login_web_app.cgi":
+			callCount++
+			_, _ = w.Write([]byte(testLoginRespBody))
+		case r.Method == http.MethodPost && r.URL.Path == "/reboot_web_app.cgi":
+			// pass
+		}
+	})
+
+	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
+	gw.client.SetCookie(&http.Cookie{Name: "sid", Value: testValidSID})
+
+	require.NoError(t, gw.Reboot(t.Context()))
+	require.NoError(t, gw.Login(t.Context()))
+
+	sidCookies := 0
+	for _, c := range gw.client.Cookies {
+		if c.Name == "sid" {
+			sidCookies++
+		}
+	}
+	assert.Equal(t, 1, sidCookies, "re-login after reboot must not accumulate duplicate sid cookies")
+}
+
 func TestNewNokiaGateway(t *testing.T) {
 	cfg := &GatewayConfig{Host: testIP}
 	gw := NewNokiaGateway(cfg)

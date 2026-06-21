@@ -2,6 +2,7 @@ package tmhi
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
@@ -25,6 +26,44 @@ func newArcadyan(gc *GatewayCommon, token string, exp time.Time) *ArcadyanGatewa
 	}
 
 	return ag
+}
+
+func newArcadyanWithToken(t *testing.T, ts *httptest.Server) *ArcadyanGateway {
+	t.Helper()
+
+	gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
+	gw.config = testConfig(ts)
+
+	return gw
+}
+
+func newClosedServerGateway(t *testing.T, token string, exp time.Time) *ArcadyanGateway {
+	t.Helper()
+	ts := newTestServer(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+	cfg := testConfigNoCreds(ts)
+	baseURL := ts.URL
+	ts.Close()
+
+	return newArcadyan(
+		&GatewayCommon{
+			client: resty.NewWithClient(&http.Client{}).SetBaseURL(baseURL),
+			config: cfg,
+		},
+		token,
+		exp,
+	)
+}
+
+func withHeadCheck(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead && r.URL.Path == "/" {
+			w.WriteHeader(http.StatusOK)
+
+			return
+		}
+
+		next(w, r)
+	}
 }
 
 func TestArcadyanGateway_Login_Success(t *testing.T) {
@@ -55,12 +94,7 @@ func TestArcadyanGateway_Reboot_Failure(t *testing.T) {
 		_, _ = w.Write([]byte("server error"))
 	})
 
-	gw := newArcadyan(
-		testCommon(ts),
-		"valid-token",
-		time.Now().Add(1*time.Hour),
-	)
-	gw.config = testConfig(ts)
+	gw := newArcadyanWithToken(t, ts)
 
 	err := gw.Reboot(t.Context())
 	require.Error(t, err)
@@ -86,12 +120,7 @@ func TestArcadyanGateway_Reboot_Success(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	gw := newArcadyan(
-		testCommon(ts),
-		"valid-token",
-		time.Now().Add(1*time.Hour),
-	)
-	gw.config = testConfig(ts)
+	gw := newArcadyanWithToken(t, ts)
 
 	err := gw.Reboot(t.Context())
 	require.NoError(t, err)
@@ -111,8 +140,7 @@ func TestArcadyanGateway_Reboot_AuthRejection_ClearsCredentials(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ts := newTestServer(t, textResponder(tc.status, "auth error"))
 
-			gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
-			gw.config = testConfig(ts)
+			gw := newArcadyanWithToken(t, ts)
 
 			err := gw.Reboot(t.Context())
 			require.ErrorIs(t, err, ErrRebootFailed)
@@ -157,19 +185,7 @@ func TestArcadyanGateway_Login_Errors(t *testing.T) {
 			name: "HTTP client error",
 			setup: func(t *testing.T) *ArcadyanGateway {
 				t.Helper()
-				ts := newTestServer(t, http.HandlerFunc(
-					func(_ http.ResponseWriter, _ *http.Request) {},
-				))
-				ts.Close()
-
-				gw := newArcadyan(
-					&GatewayCommon{
-						client: resty.NewWithClient(&http.Client{}).SetBaseURL(ts.URL),
-						config: testConfigNoCreds(ts),
-					},
-					"",
-					time.Time{},
-				)
+				gw := newClosedServerGateway(t, "", time.Time{})
 				gw.config.Username = testUsername
 				gw.config.Password = testPassword
 
@@ -246,13 +262,7 @@ func TestNewArcadyanGateway(t *testing.T) {
 }
 
 func TestArcadyanGateway_Status_Success(t *testing.T) {
-	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodHead && r.URL.Path == "/" {
-			w.WriteHeader(http.StatusOK)
-
-			return
-		}
-
+	ts := newTestServer(t, withHeadCheck(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet &&
 			r.URL.Path == "/TMI/v1/gateway/" &&
 			r.URL.RawQuery == "get=all" {
@@ -264,14 +274,9 @@ func TestArcadyanGateway_Status_Success(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusNotFound)
-	})
+	}))
 
-	gw := newArcadyan(
-		testCommon(ts),
-		"valid-token",
-		time.Now().Add(1*time.Hour),
-	)
-	gw.config = testConfig(ts)
+	gw := newArcadyanWithToken(t, ts)
 
 	result, err := gw.Status(t.Context())
 	require.NoError(t, err)
@@ -280,13 +285,7 @@ func TestArcadyanGateway_Status_Success(t *testing.T) {
 }
 
 func TestArcadyanGateway_Status_Error(t *testing.T) {
-	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodHead && r.URL.Path == "/" {
-			w.WriteHeader(http.StatusOK)
-
-			return
-		}
-
+	ts := newTestServer(t, withHeadCheck(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			w.WriteHeader(http.StatusInternalServerError)
 
@@ -294,14 +293,9 @@ func TestArcadyanGateway_Status_Error(t *testing.T) {
 		}
 
 		w.WriteHeader(http.StatusNotFound)
-	})
+	}))
 
-	gw := newArcadyan(
-		testCommon(ts),
-		"valid-token",
-		time.Now().Add(1*time.Hour),
-	)
-	gw.config = testConfig(ts)
+	gw := newArcadyanWithToken(t, ts)
 
 	result, err := gw.Status(t.Context())
 	require.NoError(t, err)
@@ -515,12 +509,7 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				ts := newTestServer(t, jsonResponder(http.StatusOK, tc.body))
 
-				gw := newArcadyan(
-					testCommon(ts),
-					"valid-token",
-					time.Now().Add(1*time.Hour),
-				)
-				gw.config = testConfig(ts)
+				gw := newArcadyanWithToken(t, ts)
 
 				result, err := gw.Signal(t.Context())
 				require.NoError(t, err)
@@ -540,22 +529,8 @@ func TestArcadyanGateway_Signal(t *testing.T) {
 				name: "with network error",
 				setup: func(t *testing.T) *ArcadyanGateway {
 					t.Helper()
-					ts := newTestServer(t, http.HandlerFunc(
-						func(_ http.ResponseWriter, _ *http.Request) {},
-					))
-					ts.Close()
 
-					gw := newArcadyan(
-						&GatewayCommon{
-							client: resty.NewWithClient(&http.Client{}).SetBaseURL(ts.URL),
-							config: testConfigNoCreds(ts),
-						},
-						"valid-token",
-						time.Now().Add(1*time.Hour),
-					)
-					gw.config = testConfigNoCreds(ts)
-
-					return gw
+					return newClosedServerGateway(t, "valid-token", time.Now().Add(1*time.Hour))
 				},
 				errorContains: "failed to get signal info",
 			},
@@ -651,19 +626,7 @@ func TestArcadyanGateway_Login_AlreadyLoggedIn(t *testing.T) {
 
 func TestArcadyanGateway_Reboot_LoginFailure(t *testing.T) {
 	// When not logged in and login fails, reboot should return error
-	ts := newTestServer(t, http.HandlerFunc(
-		func(_ http.ResponseWriter, _ *http.Request) {},
-	))
-	ts.Close()
-
-	gw := newArcadyan(
-		&GatewayCommon{
-			client: resty.NewWithClient(&http.Client{}).SetBaseURL(ts.URL),
-			config: testConfigNoCreds(ts),
-		},
-		"",
-		time.Time{},
-	)
+	gw := newClosedServerGateway(t, "", time.Time{})
 	gw.config.Username = testUsername
 	gw.config.Password = testPassword
 

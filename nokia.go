@@ -140,7 +140,7 @@ func (n *NokiaGateway) getCredentials(
 		"userhash":      sha256URL(n.config.Username, nonce.Nonce),
 		"RandomKeyhash": sha256URL(nonce.RandomKey, nonce.Nonce),
 		"response":      userPassNonceHash,
-		nonceParam:      base64urlEscape(nonce.Nonce),
+		nonceParam:      nonce.Nonce,
 		"enckey":        random16bytes(),
 		"enciv":         random16bytes(),
 	}

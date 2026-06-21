@@ -166,6 +166,26 @@ func TestNokiaGateway_getNonce_Success(t *testing.T) {
 	assert.Equal(t, "testRandomKey", nonce.RandomKey)
 }
 
+func TestNokiaGateway_getCredentials_NonceFormField(t *testing.T) {
+	// Nonce with chars that base64urlEscape would transform (+, =).
+	// The form field must echo the raw nonce so it matches what the hashes use.
+	const rawNonce = "abc+def/ghi="
+	var receivedNonce string
+
+	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseForm())
+		receivedNonce = r.FormValue(nonceParam)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(testLoginRespBody))
+	})
+
+	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
+	_, err := gw.getCredentials(t.Context(), nokiaNonce{Nonce: rawNonce, RandomKey: "key"})
+	require.NoError(t, err)
+	assert.Equal(t, rawNonce, receivedNonce, "nonce form field must be the raw value used in hashes")
+}
+
 func TestNokiaGateway_getCredentials_Success(t *testing.T) {
 	ts := newTestServer(t, jsonResponder(http.StatusOK, testLoginRespBody))
 	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")

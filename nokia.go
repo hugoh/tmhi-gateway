@@ -7,7 +7,11 @@ import (
 	"strings"
 )
 
-const nonceParam = "nonce"
+const (
+	nonceParam     = "nonce"
+	sidCookieName  = "sid"
+	loginWebAppCGI = "/login_web_app.cgi"
+)
 
 type nokiaNonce struct {
 	Nonce     string
@@ -62,7 +66,7 @@ func (n *NokiaGateway) Login(ctx context.Context) error {
 	n.credentials.SID = loginResp.Sid
 	n.credentials.csrfToken = loginResp.CsrfToken
 	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
-	n.client.SetCookie(&http.Cookie{Name: "sid", Value: n.credentials.SID})
+	n.client.SetCookie(&http.Cookie{Name: sidCookieName, Value: n.credentials.SID})
 
 	return nil
 }
@@ -127,12 +131,16 @@ func (n *NokiaGateway) isLoggedIn() bool {
 
 func (n *NokiaGateway) logout() {
 	n.credentials = nokiaLoginData{}
+	// resty.Client.SetCookie/SetCookies both append; assign directly to
+	// replace the slice so re-login doesn't accumulate stale sid cookies.
+	n.client.Cookies = nil
 }
 
 func (n *NokiaGateway) getCredentials(
 	ctx context.Context,
 	nonce nokiaNonce,
 ) (*nokiaLoginResp, error) {
+	// The Nokia gateway normalizes the password to lowercase before verification.
 	passHashInput := strings.ToLower(n.config.Password)
 	userPassHash := sha256Hash(n.config.Username, passHashInput)
 	userPassNonceHash := sha256URL(userPassHash, nonce.Nonce)
@@ -140,12 +148,12 @@ func (n *NokiaGateway) getCredentials(
 		"userhash":      sha256URL(n.config.Username, nonce.Nonce),
 		"RandomKeyhash": sha256URL(nonce.RandomKey, nonce.Nonce),
 		"response":      userPassNonceHash,
-		nonceParam:      base64urlEscape(nonce.Nonce),
+		nonceParam:      nonce.Nonce,
 		"enckey":        random16bytes(),
 		"enciv":         random16bytes(),
 	}
 
-	reqURL := "/login_web_app.cgi"
+	reqURL := loginWebAppCGI
 
 	var loginResp nokiaLoginResp
 
@@ -178,7 +186,7 @@ func (n *NokiaGateway) getNonce(ctx context.Context) (*nokiaNonce, error) {
 	resp, err := n.client.R().
 		SetContext(ctx).
 		SetResult(&result).
-		Get("/login_web_app.cgi?" + nonceParam)
+		Get(loginWebAppCGI + "?" + nonceParam)
 	if err != nil {
 		return nil, fmt.Errorf("error getting nonce: %w", err)
 	}

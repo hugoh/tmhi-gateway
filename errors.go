@@ -15,6 +15,8 @@ var (
 	ErrRebootFailed = errors.New("reboot failed")
 	// ErrSignalFailed indicates a signal operation failed.
 	ErrSignalFailed = errors.New("signal failed")
+	// ErrRequestFailed indicates an HTTP request returned an error status.
+	ErrRequestFailed = errors.New("request failed")
 )
 
 // AuthenticationError represents an authentication failure with the gateway.

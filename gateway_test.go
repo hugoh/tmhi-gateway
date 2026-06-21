@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const testServerErrMsg = "server error"
+
 func newTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
 
@@ -40,6 +42,33 @@ func TestNewGatewayCommon(t *testing.T) {
 	assert.Equal(t, cfg, gc.config)
 }
 
+func TestNewGatewayCommon_UserAgent(t *testing.T) {
+	var gotUA string
+
+	ts := newTestServer(t, func(_ http.ResponseWriter, r *http.Request) {
+		gotUA = r.Header.Get("User-Agent")
+	})
+
+	t.Run("default", func(t *testing.T) {
+		gc := NewGatewayCommon(&GatewayConfig{Host: strings.TrimPrefix(ts.URL, "http://")})
+		_, _ = gc.client.R().Get("/")
+
+		assert.Equal(t, defaultUserAgent, gotUA)
+	})
+
+	t.Run("custom", func(t *testing.T) {
+		const custom = "my-app/1.0"
+
+		gc := NewGatewayCommon(&GatewayConfig{
+			Host:      strings.TrimPrefix(ts.URL, "http://"),
+			UserAgent: custom,
+		})
+		_, _ = gc.client.R().Get("/")
+
+		assert.Equal(t, custom, gotUA)
+	})
+}
+
 func TestNewGatewayCommon_HostForms(t *testing.T) {
 	cases := []struct {
 		host string
@@ -50,6 +79,7 @@ func TestNewGatewayCommon_HostForms(t *testing.T) {
 		{host: "192.168.12.1:8080", want: "http://192.168.12.1:8080"},
 		{host: "fd00::1", want: "http://[fd00::1]"},
 		{host: "[fd00::1]:8080", want: "http://[fd00::1]:8080"},
+		{host: "::ffff:192.0.2.1", want: "http://[::ffff:192.0.2.1]"},
 	}
 
 	for _, tc := range cases {

@@ -94,6 +94,30 @@ func TestArcadyanGateway_Reboot_Success(t *testing.T) {
 
 	err := gw.Reboot(t.Context())
 	require.NoError(t, err)
+	assert.False(t, gw.isLoggedIn(), "successful reboot should invalidate the cached session")
+}
+
+func TestArcadyanGateway_Reboot_AuthRejection_ClearsCredentials(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+	}{
+		{name: "unauthorized", status: http.StatusUnauthorized},
+		{name: "forbidden", status: http.StatusForbidden},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := newTestServer(t, textResponder(tc.status, "auth error"))
+
+			gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
+			gw.config = testConfig(ts)
+
+			err := gw.Reboot(t.Context())
+			require.ErrorIs(t, err, ErrRebootFailed)
+			assert.False(t, gw.isLoggedIn(), "auth rejection should clear cached credentials")
+		})
+	}
 }
 
 func TestArcadyanGateway_Login_Errors(t *testing.T) {

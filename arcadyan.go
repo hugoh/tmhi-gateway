@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -102,8 +103,16 @@ func (a *ArcadyanGateway) Reboot(ctx context.Context) error {
 	}
 
 	if resp.IsError() {
-		return NewGatewayError("reboot", resp.StatusCode(), resp.String(), ErrRebootFailed)
+		status := resp.StatusCode()
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			a.logout()
+		}
+
+		return NewGatewayError("reboot", status, resp.String(), ErrRebootFailed)
 	}
+
+	// A successful reboot invalidates the session on the gateway side.
+	a.logout()
 
 	return nil
 }
@@ -196,6 +205,11 @@ func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
 	}
 
 	return &result.Signal, nil
+}
+
+func (a *ArcadyanGateway) logout() {
+	a.credentials = arcadianLoginData{}
+	a.client.SetAuthToken("")
 }
 
 func (a *ArcadyanGateway) isLoggedIn() bool {

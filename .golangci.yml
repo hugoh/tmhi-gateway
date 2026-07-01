@@ -2,11 +2,11 @@ version: "2"
 linters:
   default: all
   disable:
-    - depguard
-    - exhaustruct
     - gomodguard
     - noinlineerr
     - paralleltest
+    - depguard
+    - exhaustruct
     - testpackage
     - wsl
   exclusions:

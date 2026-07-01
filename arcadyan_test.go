@@ -315,7 +315,9 @@ func TestArcadyanGateway_Status_Error(t *testing.T) {
 	result, err := gw.Status(t.Context())
 	require.NoError(t, err)
 	assert.True(t, result.WebInterfaceUp)
-	assert.Error(t, result.Error)
+	require.Error(t, result.Error)
+	require.ErrorIs(t, result.Error, ErrStatusFailed)
+	assert.NotErrorIs(t, result.Error, ErrSignalFailed)
 }
 
 func TestArcadyanGateway_Request_ErrorStatus(t *testing.T) {

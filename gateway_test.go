@@ -51,6 +51,15 @@ func newClosedServerCommon(t *testing.T) *GatewayCommon {
 	}
 }
 
+func TestGatewayCommon_Close(t *testing.T) {
+	ts := newTestServer(t, func(_ http.ResponseWriter, _ *http.Request) {})
+	gc := testCommon(ts)
+
+	assert.NoError(t, gc.Close())
+	// Close is safe to call more than once.
+	assert.NoError(t, gc.Close())
+}
+
 func TestNewGatewayCommon(t *testing.T) {
 	cfg := &GatewayConfig{
 		Host:    testIP,

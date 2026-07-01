@@ -309,6 +309,51 @@ func TestArcadyanGateway_Status_Error(t *testing.T) {
 	assert.NotErrorIs(t, result.Error, ErrSignalFailed)
 }
 
+func TestArcadyanGateway_Status_NetworkError(t *testing.T) {
+	// HEAD succeeds so CheckWebInterface leaves webResult.Error nil; the GET
+	// for registration status hijacks and closes the connection to force a
+	// transport-level error distinct from an HTTP status failure.
+	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusOK)
+
+			return
+		}
+
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("ResponseWriter does not support hijacking")
+		}
+
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		_ = conn.Close()
+	})
+
+	gw := newArcadyanWithToken(t, ts)
+
+	result, err := gw.Status(t.Context())
+	require.NoError(t, err)
+	assert.True(t, result.WebInterfaceUp)
+	require.Error(t, result.Error)
+	assert.Contains(t, result.Error.Error(), "failed to get registration status")
+}
+
+func TestArcadyanGateway_Request_InvalidJSON(t *testing.T) {
+	ts := newTestServer(t, jsonResponder(http.StatusOK, "not valid json"))
+
+	gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
+	gw.config = testConfigNoCreds(ts)
+
+	result, err := gw.Request(t.Context(), "GET", "/test")
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "json unmarshal failed")
+}
+
 func TestArcadyanGateway_Request_ErrorStatus(t *testing.T) {
 	cases := []struct {
 		name   string

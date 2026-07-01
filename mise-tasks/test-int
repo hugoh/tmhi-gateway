@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Run integration tests"
+#MISE sources=["go.mod", "**/*.go"]
+test ! -d internal || gotestsum -- -race -tags=integration ./internal/...

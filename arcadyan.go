@@ -178,7 +178,7 @@ func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 				"status",
 				resp.StatusCode(),
 				"failed to get registration status",
-				ErrSignalFailed,
+				ErrStatusFailed,
 			)
 		}
 	default:

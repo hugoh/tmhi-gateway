@@ -36,6 +36,21 @@ func testCommon(ts *httptest.Server) *GatewayCommon {
 	}
 }
 
+// newClosedServerCommon returns a GatewayCommon pointed at an already-closed
+// server, used to simulate connection-refused errors.
+func newClosedServerCommon(t *testing.T) *GatewayCommon {
+	t.Helper()
+
+	ts := newTestServer(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+	baseURL := ts.URL
+	ts.Close()
+
+	return &GatewayCommon{
+		client: resty.NewWithClient(&http.Client{}).SetBaseURL(baseURL),
+		config: &GatewayConfig{},
+	}
+}
+
 func TestNewGatewayCommon(t *testing.T) {
 	cfg := &GatewayConfig{
 		Host:    testIP,

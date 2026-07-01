@@ -41,22 +41,29 @@ func nokiaTestGwClosed(t *testing.T, sid, token string) *NokiaGateway {
 	return newNokia(newClosedServerCommon(t), sid, token)
 }
 
-func Test_LoginSuccess(t *testing.T) {
-	valid := &nokiaLoginResp{
-		Success:   0,
-		Reason:    0,
-		Sid:       "foo",
-		CsrfToken: "bar",
+func TestNokiaLoginResp_HasCredentials(t *testing.T) {
+	cases := []struct {
+		name string
+		resp *nokiaLoginResp
+		want bool
+	}{
+		{
+			name: "success",
+			resp: &nokiaLoginResp{Success: 0, Reason: 0, Sid: "foo", CsrfToken: "bar"},
+			want: true,
+		},
+		{
+			name: "failure reason",
+			resp: &nokiaLoginResp{Success: 0, Reason: 600},
+			want: false,
+		},
 	}
-	assert.True(t, valid.hasCredentials())
-}
 
-func Test_LoginFailure(t *testing.T) {
-	invalid := &nokiaLoginResp{
-		Success: 0,
-		Reason:  600,
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.resp.hasCredentials())
+		})
 	}
-	assert.False(t, invalid.hasCredentials())
 }
 
 func TestNokiaGateway_getCredentials_ErrorResponse(t *testing.T) {

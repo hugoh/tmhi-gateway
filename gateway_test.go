@@ -42,6 +42,12 @@ func TestNewGatewayCommon(t *testing.T) {
 	assert.Equal(t, cfg, gc.config)
 }
 
+func TestNewGatewayCommon_NilConfig(t *testing.T) {
+	assert.PanicsWithValue(t, "tmhi: GatewayConfig must not be nil", func() {
+		NewGatewayCommon(nil)
+	})
+}
+
 func TestNewGatewayCommon_UserAgent(t *testing.T) {
 	var gotUA string
 

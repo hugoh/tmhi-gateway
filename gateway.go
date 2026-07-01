@@ -33,6 +33,10 @@ type GatewayCommon struct {
 
 // NewGatewayCommon creates a new GatewayCommon with the given configuration.
 func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
+	if cfg == nil {
+		panic("tmhi: GatewayConfig must not be nil")
+	}
+
 	host := cfg.Host
 	// Bare IPv6 literals must be bracketed in URLs.
 	// Use ContainsRune(':') rather than To4()==nil so IPv4-mapped IPv6

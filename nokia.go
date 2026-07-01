@@ -71,16 +71,16 @@ func (n *NokiaGateway) Login(ctx context.Context) error {
 
 // Reboot restarts the Nokia gateway.
 func (n *NokiaGateway) Reboot(ctx context.Context) error {
+	if n.config.DryRun {
+		return nil
+	}
+
 	if err := n.Login(ctx); err != nil {
 		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
 	}
 
 	formData := map[string]string{
 		"csrf_token": n.credentials.csrfToken,
-	}
-
-	if n.config.DryRun {
-		return nil
 	}
 
 	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.

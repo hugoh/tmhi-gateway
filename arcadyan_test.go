@@ -113,6 +113,21 @@ func TestArcadyanGateway_Reboot_DryRun(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestArcadyanGateway_Reboot_DryRun_SkipsLogin(t *testing.T) {
+	// Not logged in: if DryRun didn't short-circuit before Login, this would
+	// hit the network and the handler below would fail the test.
+	ts := newTestServer(t, func(_ http.ResponseWriter, _ *http.Request) {
+		t.Fatal("unexpected HTTP call in dry run")
+	})
+
+	gw := newArcadyan(testCommon(ts), "", time.Time{})
+	gw.config = testConfig(ts)
+	gw.config.DryRun = true
+
+	err := gw.Reboot(t.Context())
+	require.NoError(t, err)
+}
+
 func TestArcadyanGateway_Reboot_Success(t *testing.T) {
 	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, http.MethodPost, r.Method)

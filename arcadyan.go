@@ -86,13 +86,13 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 
 // Reboot restarts the Arcadyan gateway.
 func (a *ArcadyanGateway) Reboot(ctx context.Context) error {
+	if a.config.DryRun {
+		return nil
+	}
+
 	err := a.Login(ctx)
 	if err != nil {
 		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
-	}
-
-	if a.config.DryRun {
-		return nil
 	}
 
 	rebootRequestPath := "/TMI/v1/gateway/reset?set=reboot"

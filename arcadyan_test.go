@@ -39,19 +39,8 @@ func newArcadyanWithToken(t *testing.T, ts *httptest.Server) *ArcadyanGateway {
 
 func newClosedServerGateway(t *testing.T, token string, exp time.Time) *ArcadyanGateway {
 	t.Helper()
-	ts := newTestServer(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
-	cfg := testConfigNoCreds(ts)
-	baseURL := ts.URL
-	ts.Close()
 
-	return newArcadyan(
-		&GatewayCommon{
-			client: resty.NewWithClient(&http.Client{}).SetBaseURL(baseURL),
-			config: cfg,
-		},
-		token,
-		exp,
-	)
+	return newArcadyan(newClosedServerCommon(t), token, exp)
 }
 
 func withHeadCheck(next http.HandlerFunc) http.HandlerFunc {

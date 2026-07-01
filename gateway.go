@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 
 	"resty.dev/v3"
@@ -97,4 +98,48 @@ func (gc *GatewayCommon) CheckWebInterface(ctx context.Context) *StatusResult {
 	result.WebInterfaceUp = resp.IsStatusSuccess()
 
 	return result
+}
+
+// authSession is implemented by gateway credential holders that must be
+// invalidated when the gateway rejects a request as unauthenticated.
+type authSession interface {
+	logout()
+}
+
+// performReboot runs the shared reboot flow used by every gateway
+// implementation: skip entirely in dry-run mode, otherwise authenticate,
+// issue the vendor-supplied reboot request, and invalidate the session on
+// success or on an auth rejection.
+func (gc *GatewayCommon) performReboot(
+	ctx context.Context,
+	sess authSession,
+	login func(context.Context) error,
+	doRequest func() (*resty.Response, error),
+) error {
+	if gc.config.DryRun {
+		return nil
+	}
+
+	if err := login(ctx); err != nil {
+		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
+	}
+
+	resp, err := doRequest()
+	if err != nil {
+		return fmt.Errorf("reboot request failed: %w", err)
+	}
+
+	if resp.IsStatusFailure() {
+		status := resp.StatusCode()
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			sess.logout()
+		}
+
+		return NewGatewayError("reboot", status, resp.String(), ErrRebootFailed)
+	}
+
+	// A successful reboot invalidates the session on the gateway side.
+	sess.logout()
+
+	return nil
 }

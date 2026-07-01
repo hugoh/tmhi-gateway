@@ -13,6 +13,13 @@ import (
 
 const testServerErrMsg = "server error"
 
+// Both vendor gateways must satisfy authSession so performReboot can
+// invalidate their session on an auth rejection or a successful reboot.
+var (
+	_ authSession = (*ArcadyanGateway)(nil)
+	_ authSession = (*NokiaGateway)(nil)
+)
+
 func newTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
 

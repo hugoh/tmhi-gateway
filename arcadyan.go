@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
+
+	"resty.dev/v3"
 )
 
 // infoURL is the endpoint for gateway information.
@@ -86,35 +87,9 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 
 // Reboot restarts the Arcadyan gateway.
 func (a *ArcadyanGateway) Reboot(ctx context.Context) error {
-	if a.config.DryRun {
-		return nil
-	}
-
-	err := a.Login(ctx)
-	if err != nil {
-		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
-	}
-
-	rebootRequestPath := "/TMI/v1/gateway/reset?set=reboot"
-
-	resp, err := a.client.R().SetContext(ctx).Post(rebootRequestPath)
-	if err != nil {
-		return fmt.Errorf("reboot request failed: %w", err)
-	}
-
-	if resp.IsStatusFailure() {
-		status := resp.StatusCode()
-		if status == http.StatusUnauthorized || status == http.StatusForbidden {
-			a.logout()
-		}
-
-		return NewGatewayError("reboot", status, resp.String(), ErrRebootFailed)
-	}
-
-	// A successful reboot invalidates the session on the gateway side.
-	a.logout()
-
-	return nil
+	return a.performReboot(ctx, a, a.Login, func() (*resty.Response, error) {
+		return a.client.R().SetContext(ctx).Post("/TMI/v1/gateway/reset?set=reboot")
+	})
 }
 
 // Info retrieves gateway information.

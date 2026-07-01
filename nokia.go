@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"resty.dev/v3"
 )
 
 const (
@@ -71,41 +73,18 @@ func (n *NokiaGateway) Login(ctx context.Context) error {
 
 // Reboot restarts the Nokia gateway.
 func (n *NokiaGateway) Reboot(ctx context.Context) error {
-	if n.config.DryRun {
-		return nil
-	}
-
-	if err := n.Login(ctx); err != nil {
-		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
-	}
-
-	formData := map[string]string{
-		"csrf_token": n.credentials.csrfToken,
-	}
-
-	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
-	resp, err := n.client.R().
-		SetContext(ctx).
-		SetCookie(&http.Cookie{Name: sidCookieName, Value: n.credentials.SID}).
-		SetFormData(formData).
-		Post("/reboot_web_app.cgi")
-	if err != nil {
-		return fmt.Errorf("error sending reboot request: %w", err)
-	}
-
-	if resp.IsStatusFailure() {
-		status := resp.StatusCode()
-		if status == http.StatusUnauthorized || status == http.StatusForbidden {
-			n.logout()
+	return n.performReboot(ctx, n, n.Login, func() (*resty.Response, error) {
+		formData := map[string]string{
+			"csrf_token": n.credentials.csrfToken,
 		}
 
-		return NewGatewayError("reboot", status, resp.String(), ErrRebootFailed)
-	}
-
-	// A successful reboot invalidates the session on the gateway side.
-	n.logout()
-
-	return nil
+		//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
+		return n.client.R().
+			SetContext(ctx).
+			SetCookie(&http.Cookie{Name: sidCookieName, Value: n.credentials.SID}).
+			SetFormData(formData).
+			Post("/reboot_web_app.cgi")
+	})
 }
 
 // Request is not implemented for Nokia gateway.

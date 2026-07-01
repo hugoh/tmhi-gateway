@@ -322,7 +322,7 @@ func TestNokiaGateway_Reboot_RequestError(t *testing.T) {
 
 	err := gw.Reboot(t.Context())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error sending reboot request")
+	assert.Contains(t, err.Error(), "reboot request failed")
 }
 
 func TestNokiaGateway_NotImplemented(t *testing.T) {

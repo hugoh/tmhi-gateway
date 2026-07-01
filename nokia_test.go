@@ -240,6 +240,19 @@ func TestNokiaGateway_Reboot_DryRun(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestNokiaGateway_Reboot_DryRun_SkipsLogin(t *testing.T) {
+	// Not logged in: if DryRun didn't short-circuit before Login, this would
+	// hit the network and the handler below would fail the test.
+	ts := newTestServer(t, func(_ http.ResponseWriter, _ *http.Request) {
+		t.Fatal("unexpected HTTP call in dry run")
+	})
+
+	gw := nokiaTestGw(ts, &GatewayConfig{DryRun: true}, "", "")
+
+	err := gw.Reboot(t.Context())
+	assert.NoError(t, err)
+}
+
 func TestNokiaGateway_Reboot_ErrorResponse(t *testing.T) {
 	ts := newTestServer(t, textResponder(http.StatusInternalServerError, "reboot failed"))
 	gw := nokiaTestGw(ts, &GatewayConfig{}, testValidSID, testValidToken)

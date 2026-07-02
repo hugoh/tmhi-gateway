@@ -12,7 +12,7 @@ permissions: {}
 
 jobs:
   update:
-    uses: hugoh/go-tools/.github/workflows/go-template-update.yml@5fa8d238ac1723b18ede32c5dfe03a6ae21e20f2
+    uses: hugoh/go-tools/.github/workflows/go-template-update.yml@14d0213d60106e5368545ecd27a958dc2afa3b8f
     permissions:
       contents: write
       pull-requests: write

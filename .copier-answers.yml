@@ -4,8 +4,8 @@ _src_path: gh:hugoh/go-tools
 codecov_ignore:
 - main.go
 codecov_style: simple
-cog_omit_type: doc
-coverage_backends_override: false
+cog_omit_types:
+- doc
 coverage_total: 90
 dev_watch: true
 dprint_has_excludes: true
@@ -29,4 +29,5 @@ hk_prepush_with_go_ci: false
 project_name: tmhi-gateway
 test_int_cmd: test ! -d internal || gotestsum -- -race -tags=integration ./internal/...
 testcoverage_excludes: []
+testcoverage_overrides: []
 

@@ -3,10 +3,8 @@ package tmhi
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
-	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,49 +28,42 @@ func newNokia(gc *GatewayCommon, sid, token string) *NokiaGateway {
 	return gw
 }
 
-func nokiaConfig(ts *httptest.Server) *GatewayConfig {
-	return &GatewayConfig{
-		Host:     strings.TrimPrefix(ts.URL, "http://"),
-		Username: testUsername,
-		Password: testPassword,
-	}
-}
-
 func nokiaTestGw(ts *httptest.Server, cfg *GatewayConfig, sid, token string) *NokiaGateway {
-	return newNokia(&GatewayCommon{
-		client: resty.NewWithClient(&http.Client{}).SetBaseURL(ts.URL),
-		config: cfg,
-	}, sid, token)
+	gc := testCommon(ts)
+	gc.config = cfg
+
+	return newNokia(gc, sid, token)
 }
 
-func nokiaTestGwClosed(cfg *GatewayConfig, sid, token string) *NokiaGateway {
-	ts := httptest.NewServer(http.HandlerFunc(
-		func(_ http.ResponseWriter, _ *http.Request) {},
-	))
-	ts.Close()
+func nokiaTestGwClosed(t *testing.T, sid, token string) *NokiaGateway {
+	t.Helper()
 
-	return newNokia(&GatewayCommon{
-		client: resty.NewWithClient(&http.Client{}).SetBaseURL(ts.URL),
-		config: cfg,
-	}, sid, token)
+	return newNokia(newClosedServerCommon(t), sid, token)
 }
 
-func Test_LoginSuccess(t *testing.T) {
-	valid := &nokiaLoginResp{
-		Success:   0,
-		Reason:    0,
-		Sid:       "foo",
-		CsrfToken: "bar",
+func TestNokiaLoginResp_HasCredentials(t *testing.T) {
+	cases := []struct {
+		name string
+		resp *nokiaLoginResp
+		want bool
+	}{
+		{
+			name: "success",
+			resp: &nokiaLoginResp{Success: 0, Reason: 0, Sid: "foo", CsrfToken: "bar"},
+			want: true,
+		},
+		{
+			name: "failure reason",
+			resp: &nokiaLoginResp{Success: 0, Reason: 600},
+			want: false,
+		},
 	}
-	assert.True(t, valid.hasCredentials())
-}
 
-func Test_LoginFailure(t *testing.T) {
-	invalid := &nokiaLoginResp{
-		Success: 0,
-		Reason:  600,
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.resp.hasCredentials())
+		})
 	}
-	assert.False(t, invalid.hasCredentials())
 }
 
 func TestNokiaGateway_getCredentials_ErrorResponse(t *testing.T) {
@@ -92,7 +83,7 @@ func TestNokiaGateway_getCredentials_ErrorResponse(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gw := nokiaTestGw(tc.ts, nokiaConfig(tc.ts), "", "")
+			gw := nokiaTestGw(tc.ts, testConfig(tc.ts), "", "")
 
 			_, err := gw.getCredentials(t.Context(), nokiaNonce{Nonce: "test"})
 			require.Error(t, err)
@@ -108,7 +99,7 @@ func TestNokiaGateway_Reboot_Success(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
+	gw := nokiaTestGw(ts, testConfig(ts), testValidSID, testValidToken)
 
 	err := gw.Reboot(t.Context())
 	require.NoError(t, err)
@@ -117,7 +108,7 @@ func TestNokiaGateway_Reboot_Success(t *testing.T) {
 
 func TestNokiaGateway_Reboot_StaleSession(t *testing.T) {
 	ts := newTestServer(t, textResponder(http.StatusUnauthorized, "session expired"))
-	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
+	gw := nokiaTestGw(ts, testConfig(ts), testValidSID, testValidToken)
 
 	err := gw.Reboot(t.Context())
 	require.ErrorIs(t, err, ErrRebootFailed)
@@ -139,7 +130,7 @@ func TestNokiaGateway_Status(t *testing.T) {
 }
 
 func TestNokiaGateway_getNonce_ErrorResponse(t *testing.T) {
-	gw := nokiaTestGwClosed(&GatewayConfig{}, "", "")
+	gw := nokiaTestGwClosed(t, "", "")
 
 	_, err := gw.getNonce(t.Context())
 	require.Error(t, err)
@@ -182,7 +173,7 @@ func TestNokiaGateway_getCredentials_NonceFormField(t *testing.T) {
 		_, _ = w.Write([]byte(testLoginRespBody))
 	})
 
-	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
+	gw := nokiaTestGw(ts, testConfig(ts), "", "")
 	_, err := gw.getCredentials(t.Context(), nokiaNonce{Nonce: rawNonce, RandomKey: "key"})
 	require.NoError(t, err)
 	assert.Equal(
@@ -195,7 +186,7 @@ func TestNokiaGateway_getCredentials_NonceFormField(t *testing.T) {
 
 func TestNokiaGateway_getCredentials_Success(t *testing.T) {
 	ts := newTestServer(t, jsonResponder(http.StatusOK, testLoginRespBody))
-	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
+	gw := nokiaTestGw(ts, testConfig(ts), "", "")
 
 	loginResp, err := gw.getCredentials(
 		t.Context(),
@@ -214,7 +205,7 @@ func TestNokiaGateway_Login_Alreadyauthenticated(t *testing.T) {
 }
 
 func TestNokiaGateway_Login_NonceError(t *testing.T) {
-	gw := nokiaTestGwClosed(&GatewayConfig{}, "", "")
+	gw := nokiaTestGwClosed(t, "", "")
 
 	err := gw.Login(t.Context())
 	require.Error(t, err)
@@ -223,7 +214,7 @@ func TestNokiaGateway_Login_NonceError(t *testing.T) {
 
 func TestNokiaGateway_Login_CredentialsError(t *testing.T) {
 	ts := newTestServer(t, jsonResponder(http.StatusOK, testNonceBody))
-	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
+	gw := nokiaTestGw(ts, testConfig(ts), "", "")
 
 	err := gw.Login(t.Context())
 	assert.Error(t, err)
@@ -235,6 +226,19 @@ func TestNokiaGateway_Reboot_DryRun(t *testing.T) {
 	})
 
 	gw := nokiaTestGw(ts, &GatewayConfig{DryRun: true}, testValidSID, testValidToken)
+
+	err := gw.Reboot(t.Context())
+	assert.NoError(t, err)
+}
+
+func TestNokiaGateway_Reboot_DryRun_SkipsLogin(t *testing.T) {
+	// Not logged in: if DryRun didn't short-circuit before Login, this would
+	// hit the network and the handler below would fail the test.
+	ts := newTestServer(t, func(_ http.ResponseWriter, _ *http.Request) {
+		t.Fatal("unexpected HTTP call in dry run")
+	})
+
+	gw := nokiaTestGw(ts, &GatewayConfig{DryRun: true}, "", "")
 
 	err := gw.Reboot(t.Context())
 	assert.NoError(t, err)
@@ -276,7 +280,7 @@ func TestNokiaGateway_Login_NonceSuccessCredentialsError(t *testing.T) {
 		}
 	})
 
-	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
+	gw := nokiaTestGw(ts, testConfig(ts), "", "")
 
 	err := gw.Login(t.Context())
 	require.Error(t, err)
@@ -296,7 +300,7 @@ func TestNokiaGateway_Login_Success(t *testing.T) {
 		}
 	})
 
-	gw := nokiaTestGw(ts, nokiaConfig(ts), "", "")
+	gw := nokiaTestGw(ts, testConfig(ts), "", "")
 
 	err := gw.Login(t.Context())
 	require.NoError(t, err)
@@ -305,11 +309,11 @@ func TestNokiaGateway_Login_Success(t *testing.T) {
 }
 
 func TestNokiaGateway_Reboot_RequestError(t *testing.T) {
-	gw := nokiaTestGwClosed(&GatewayConfig{}, testValidSID, testValidToken)
+	gw := nokiaTestGwClosed(t, testValidSID, testValidToken)
 
 	err := gw.Reboot(t.Context())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error sending reboot request")
+	assert.Contains(t, err.Error(), "reboot request failed")
 }
 
 func TestNokiaGateway_NotImplemented(t *testing.T) {
@@ -331,25 +335,37 @@ func TestNokiaGateway_NotImplemented(t *testing.T) {
 	})
 }
 
-func TestNokiaGateway_logout_ClearsCookie(t *testing.T) {
-	ts := newTestServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
-	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
-	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
-	gw.client.SetCookie(&http.Cookie{Name: sidCookieName, Value: testValidSID})
+func TestNokiaGateway_logout_ClearsCredentials(t *testing.T) {
+	gw := newNokia(&GatewayCommon{config: &GatewayConfig{}}, testValidSID, testValidToken)
 
 	gw.logout()
 
 	assert.False(t, gw.isLoggedIn(), "logout should clear credentials")
-	assert.Empty(t, gw.client.Cookies, "logout should clear all resty cookies")
 }
 
-func TestNokiaGateway_Reboot_ReloginNoDuplicateCookie(t *testing.T) {
-	// After reboot (which calls logout), a subsequent Login should not
-	// accumulate a second sid cookie from the previous session.
-	callCount := 0
+func TestNokiaGateway_Reboot_SendsSIDCookie(t *testing.T) {
+	// Reboot must include the current session SID in the request cookie.
+	var gotCookie string
+
+	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		if r.Method == http.MethodPost && r.URL.Path == "/reboot_web_app.cgi" {
+			if c, err := r.Cookie(sidCookieName); err == nil {
+				gotCookie = c.Value
+			}
+		}
+	})
+
+	gw := nokiaTestGw(ts, testConfig(ts), testValidSID, testValidToken)
+
+	require.NoError(t, gw.Reboot(t.Context()))
+	assert.Equal(t, testValidSID, gotCookie, "reboot request must carry the session SID cookie")
+}
+
+func TestNokiaGateway_Reboot_ReloginHasFreshSID(t *testing.T) {
+	// After reboot (which calls logout), a subsequent Login must use fresh credentials,
+	// not carry over the old SID.
 	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -358,34 +374,22 @@ func TestNokiaGateway_Reboot_ReloginNoDuplicateCookie(t *testing.T) {
 		case r.Method == http.MethodGet:
 			_, _ = w.Write([]byte(testNonceBody))
 		case r.Method == http.MethodPost && r.URL.Path == loginWebAppCGI:
-			callCount++
 			_, _ = w.Write([]byte(testLoginRespBody))
-		case r.Method == http.MethodPost && r.URL.Path == "/reboot_web_app.cgi":
-			// pass
 		}
 	})
 
-	gw := nokiaTestGw(ts, nokiaConfig(ts), testValidSID, testValidToken)
-	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
-	gw.client.SetCookie(&http.Cookie{Name: sidCookieName, Value: testValidSID})
+	gw := nokiaTestGw(ts, testConfig(ts), testValidSID, testValidToken)
 
 	require.NoError(t, gw.Reboot(t.Context()))
 	require.NoError(t, gw.Login(t.Context()))
 
-	sidCookies := 0
-
-	for _, c := range gw.client.Cookies {
-		if c.Name == sidCookieName {
-			sidCookies++
-		}
-	}
-
 	assert.Equal(
 		t,
-		1,
-		sidCookies,
-		"re-login after reboot must not accumulate duplicate sid cookies",
+		"testSid",
+		gw.credentials.SID,
+		"re-login after reboot must have fresh SID, not the old one",
 	)
+	assert.NotEqual(t, testValidSID, gw.credentials.SID)
 }
 
 func TestNewNokiaGateway(t *testing.T) {

@@ -1,15 +1,12 @@
 {
-  "json": {
-  },
-  "markdown": {
-  },
-  "toml": {
-  },
-  "yaml": {
-  },
+  "json": {},
+  "markdown": {},
+  "toml": {},
+  "yaml": {},
   "excludes": [
     ".copier-answers.yml",
-    "**/*-lock.json"
+    "**/*-lock.json",
+    "mise.toml"
   ],
   "plugins": [
     "https://plugins.dprint.dev/json-0.22.0.wasm",

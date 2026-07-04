@@ -2,17 +2,20 @@
 name: Update from go-tools template
 
 on:
-  schedule:
-    - cron: "0 6 * * 1"
-  repository_dispatch:
-    types: [go-tools-updated]
+  push:
+    branches:
+      - renovate/**
   workflow_dispatch: {}
 
 permissions: {}
 
 jobs:
   update:
+<<<<<<< before updating
     uses: hugoh/go-tools/.github/workflows/go-template-update.yml@310e3de60bb4ac5daaff871d3b34ab6cc1f7562b
+=======
+    uses: hugoh/go-tools/.github/workflows/go-template-update.yml@fd312307bff06315fdff0d57fa5fa878d250f5c1
+>>>>>>> after updating
     permissions:
       contents: write
       pull-requests: write

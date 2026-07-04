@@ -4,11 +4,19 @@ import "package://github.com/jdx/hk/releases/download/v1.49.0/hk@1.49.0#/Builtin
 local Common = new Group {
   steps {
     ["actionlint"] = Builtins.actionlint
+<<<<<<< before updating
     // hugoh/go-tools' own self-referential workflow pins are rendered by the
     // go-tools template using the raw commit hash with no version comment;
     // excluding them from pinact keeps that comment-less form stable so
     // copier update's 3-way merge never has to reconcile a pinact-added
     // comment against the template's un-commented rendering
+=======
+    // hugoh/go-tools' own self-referential workflow pins are rendered by this
+    // template using the raw commit hash with no version comment; excluding
+    // them from pinact keeps that comment-less form stable so copier update's
+    // 3-way merge never has to reconcile a pinact-added comment against the
+    // template's un-commented rendering
+>>>>>>> after updating
     ["pinact"] = (Builtins.pinact) {
       check_diff = "pinact run --verify --check --exclude 'hugoh/go-tools.*' {{ files }}"
       fix = "pinact run --verify --exclude 'hugoh/go-tools.*' {{ files }}"
@@ -36,7 +44,13 @@ local linters = new Mapping<String, Step> {
   ["golangci-lint"] = (Builtins.golangci_lint) {
     profiles = List("!ci")
   }
+<<<<<<< before updating
   ["gomod-tidy"] = Builtins.gomod_tidy
+=======
+  ["gomod-tidy"] = (Builtins.gomod_tidy) {
+    profiles = List("!ci")
+  }
+>>>>>>> after updating
   ["shellcheck"] = Builtins.shellcheck
   ["conventional-commit"] {
     check = "cog check --from-latest-tag"

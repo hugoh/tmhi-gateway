@@ -28,7 +28,13 @@ local linters = new Mapping<String, Step> {
   ["golangci-lint"] = (Builtins.golangci_lint) {
     profiles = List("!ci")
   }
+<<<<<<< before updating
   ["gomod-tidy"] = Builtins.gomod_tidy
+=======
+  ["gomod-tidy"] = (Builtins.gomod_tidy) {
+    profiles = List("!ci")
+  }
+>>>>>>> after updating
   ["shellcheck"] = Builtins.shellcheck
   ["conventional-commit"] {
     check = "cog check --from-latest-tag"

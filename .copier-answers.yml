@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.2.2
+_commit: v1.5.0
 _src_path: gh:hugoh/go-tools
 codecov_ignore:
 - main.go
@@ -8,13 +8,12 @@ cog_omit_types:
 - doc
 coverage_total: 90
 dev_watch: true
-dprint_has_excludes: true
 golangci_extra_disable:
 - depguard
 - exhaustruct
 - testpackage
 golangci_extra_exclusions: []
-golangci_revive_overrides: false
+golangci_settings: ''
 golangci_test_exclude_linters:
 - err113
 - funlen

@@ -11,12 +11,12 @@ permissions: {}
 
 jobs:
   hk:
-    uses: hugoh/go-tools/.github/workflows/go-hk.yml@f96c093130d5b6850c2fd66ce55818de447afbe9
+    uses: hugoh/go-tools/.github/workflows/go-hk.yml@f0c60ec582a8ce90080980a4fb79409a0d195491
     permissions:
       contents: read
 
   goci:
-    uses: hugoh/go-tools/.github/workflows/go-ci.yml@f96c093130d5b6850c2fd66ce55818de447afbe9
+    uses: hugoh/go-tools/.github/workflows/go-ci.yml@f0c60ec582a8ce90080980a4fb79409a0d195491
     permissions:
       contents: read
     secrets:

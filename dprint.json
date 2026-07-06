@@ -5,10 +5,6 @@
   "yaml": {},
   "excludes": [
     ".copier-answers.yml",
-<<<<<<< before updating
-    "**/*-lock.json",
-=======
->>>>>>> after updating
     "mise.toml"
   ],
   "plugins": [

@@ -5,7 +5,6 @@
   "yaml": {},
   "excludes": [
     ".copier-answers.yml",
-    "**/*-lock.json",
     "mise.toml"
   ],
   "plugins": [

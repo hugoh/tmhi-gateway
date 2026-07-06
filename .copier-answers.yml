@@ -1,6 +1,6 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
 _commit: v1.2.2
-_src_path: gh:hugoh/go-tools
+_src_path: https://github.com/hugoh/go-tools.git
 codecov_ignore:
 - main.go
 codecov_style: simple

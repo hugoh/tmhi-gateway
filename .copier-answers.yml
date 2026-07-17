@@ -1,9 +1,6 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.9.0
+_commit: v1.10.0
 _src_path: https://github.com/hugoh/go-tools.git
-codecov_ignore:
-- main.go
-codecov_style: simple
 cog_omit_types:
 - doc
 coverage_total: 90
@@ -22,13 +19,8 @@ has_fuzz: false
 has_gen: false
 has_goreleaser: false
 has_test_int: true
-hk_has_golangci_step: true
-hk_has_goreleaser_step: false
-hk_prepush_with_go_ci: false
 project_name: tmhi-gateway
 test_int_cmd: test ! -d internal || gotestsum -- -race -tags=integration ./internal/...
 testcoverage_excludes: []
 testcoverage_overrides: []
 
-
-#copier updated

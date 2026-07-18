@@ -3,4 +3,4 @@
 #MISE sources=["**/*.go", "**/*.json", "**/*.md", "**/*.toml", "**/*.yaml", "**/*.yml"]
 set -e
 golangci-lint fmt ./...
-dprint fmt . --excludes README.md
+hk fix --all

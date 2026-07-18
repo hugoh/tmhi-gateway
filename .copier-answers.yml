@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.12.1
+_commit: v1.13.2
 _src_path: https://github.com/hugoh/go-tools.git
 cog_omit_types:
 - doc
@@ -24,5 +24,3 @@ test_int_cmd: test ! -d internal || gotestsum -- -race -tags=integration ./inter
 testcoverage_excludes: []
 testcoverage_overrides: []
 
-
-#copier updated

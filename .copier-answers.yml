@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.13.3
+_commit: v1.15.0
 _src_path: https://github.com/hugoh/go-tools.git
 cog_omit_types:
 - doc
@@ -18,6 +18,7 @@ has_executable: true
 has_fuzz: false
 has_gen: false
 has_goreleaser: false
+has_pages: false
 has_test_int: true
 project_name: tmhi-gateway
 test_int_cmd: test ! -d internal || gotestsum -- -race -tags=integration ./internal/...

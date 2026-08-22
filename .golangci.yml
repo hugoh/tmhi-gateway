@@ -2,11 +2,12 @@ version: "2"
 linters:
   default: all
   disable:
+    - depguard
+    - exhaustruct
+    - exhaustruct_v5
     - gomodguard
     - noinlineerr
     - paralleltest
-    - depguard
-    - exhaustruct
     - testpackage
     - wsl
   exclusions:
@@ -14,8 +15,8 @@ linters:
       - path: _test\.go$
         linters:
           - err113
-          - funlen
           - varnamelen
+          - funlen
 formatters:
   enable:
     - gci

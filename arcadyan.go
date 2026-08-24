@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
+
+	"resty.dev/v3"
 )
 
 // infoURL is the endpoint for gateway information.
@@ -67,7 +68,7 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 		return fmt.Errorf("login request failed: %w", err)
 	}
 
-	if resp.IsError() {
+	if resp.IsStatusFailure() {
 		return NewAuthError(resp.StatusCode(), resp.String(), nil)
 	}
 
@@ -86,35 +87,9 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 
 // Reboot restarts the Arcadyan gateway.
 func (a *ArcadyanGateway) Reboot(ctx context.Context) error {
-	err := a.Login(ctx)
-	if err != nil {
-		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
-	}
-
-	if a.config.DryRun {
-		return nil
-	}
-
-	rebootRequestPath := "/TMI/v1/gateway/reset?set=reboot"
-
-	resp, err := a.client.R().SetContext(ctx).Post(rebootRequestPath)
-	if err != nil {
-		return fmt.Errorf("reboot request failed: %w", err)
-	}
-
-	if resp.IsError() {
-		status := resp.StatusCode()
-		if status == http.StatusUnauthorized || status == http.StatusForbidden {
-			a.logout()
-		}
-
-		return NewGatewayError("reboot", status, resp.String(), ErrRebootFailed)
-	}
-
-	// A successful reboot invalidates the session on the gateway side.
-	a.logout()
-
-	return nil
+	return a.performReboot(ctx, a, a.Login, func() (*resty.Response, error) {
+		return a.client.R().SetContext(ctx).Post("/TMI/v1/gateway/reset?set=reboot")
+	})
 }
 
 // Info retrieves gateway information.
@@ -129,12 +104,12 @@ func (a *ArcadyanGateway) Request(ctx context.Context, method, path string) (*In
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 
-	if resp.IsError() {
+	if resp.IsStatusFailure() {
 		return nil, fmt.Errorf("%w: HTTP %d", ErrRequestFailed, resp.StatusCode())
 	}
 
 	contentType := resp.Header().Get("Content-Type")
-	body := resp.Body()
+	body := resp.Bytes()
 
 	var data map[string]any
 	if strings.HasPrefix(contentType, jsonContentType) {
@@ -172,13 +147,13 @@ func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 		if webResult.Error == nil {
 			webResult.Error = NewGatewayError("status", 0, "failed to get registration status", err)
 		}
-	case resp.IsError():
+	case resp.IsStatusFailure():
 		if webResult.Error == nil {
 			webResult.Error = NewGatewayError(
 				"status",
 				resp.StatusCode(),
 				"failed to get registration status",
-				ErrSignalFailed,
+				ErrStatusFailed,
 			)
 		}
 	default:
@@ -199,7 +174,7 @@ func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
 		return nil, NewGatewayError("signal", 0, "failed to get signal info", err)
 	}
 
-	if resp.IsError() {
+	if resp.IsStatusFailure() {
 		return nil, NewGatewayError(
 			"signal",
 			resp.StatusCode(),

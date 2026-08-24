@@ -7,11 +7,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-resty/resty/v2"
 	"github.com/stretchr/testify/assert"
+	"resty.dev/v3"
 )
 
 const testServerErrMsg = "server error"
+
+// Both vendor gateways must satisfy authSession so performReboot can
+// invalidate their session on an auth rejection or a successful reboot.
+var (
+	_ authSession = (*ArcadyanGateway)(nil)
+	_ authSession = (*NokiaGateway)(nil)
+)
 
 func newTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
@@ -29,6 +36,30 @@ func testCommon(ts *httptest.Server) *GatewayCommon {
 	}
 }
 
+// newClosedServerCommon returns a GatewayCommon pointed at an already-closed
+// server, used to simulate connection-refused errors.
+func newClosedServerCommon(t *testing.T) *GatewayCommon {
+	t.Helper()
+
+	ts := newTestServer(t, http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
+	baseURL := ts.URL
+	ts.Close()
+
+	return &GatewayCommon{
+		client: resty.NewWithClient(&http.Client{}).SetBaseURL(baseURL),
+		config: &GatewayConfig{},
+	}
+}
+
+func TestGatewayCommon_Close(t *testing.T) {
+	ts := newTestServer(t, func(_ http.ResponseWriter, _ *http.Request) {})
+	gc := testCommon(ts)
+
+	assert.NoError(t, gc.Close())
+	// Close is safe to call more than once.
+	assert.NoError(t, gc.Close())
+}
+
 func TestNewGatewayCommon(t *testing.T) {
 	cfg := &GatewayConfig{
 		Host:    testIP,
@@ -40,6 +71,12 @@ func TestNewGatewayCommon(t *testing.T) {
 
 	assert.NotNil(t, gc.client)
 	assert.Equal(t, cfg, gc.config)
+}
+
+func TestNewGatewayCommon_NilConfig(t *testing.T) {
+	assert.PanicsWithValue(t, "tmhi: GatewayConfig must not be nil", func() {
+		NewGatewayCommon(nil)
+	})
 }
 
 func TestNewGatewayCommon_UserAgent(t *testing.T) {
@@ -85,7 +122,7 @@ func TestNewGatewayCommon_HostForms(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.host, func(t *testing.T) {
 			gc := NewGatewayCommon(&GatewayConfig{Host: tc.host})
-			assert.Equal(t, tc.want, gc.client.BaseURL)
+			assert.Equal(t, tc.want, gc.client.BaseURL())
 		})
 	}
 }

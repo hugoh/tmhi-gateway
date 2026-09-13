@@ -14,6 +14,6 @@ type GatewayConfig struct {
 	DryRun   bool
 	Debug    bool
 	// UserAgent overrides the User-Agent header sent with every request.
-	// Defaults to "tmhi-gateway/v2" when empty.
+	// Defaults to "tmhi-gateway/v3" when empty.
 	UserAgent string
 }

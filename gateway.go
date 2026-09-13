@@ -22,7 +22,7 @@ type Gateway interface {
 	Signal(ctx context.Context) (*SignalResult, error)
 }
 
-const defaultUserAgent = "tmhi-gateway/v2"
+const defaultUserAgent = "tmhi-gateway/v3"
 
 // GatewayCommon provides shared functionality for gateway implementations.
 type GatewayCommon struct {

@@ -19,36 +19,6 @@ var (
 	ErrRequestFailed = errors.New("request failed")
 )
 
-// AuthenticationError represents an authentication failure with the gateway.
-type AuthenticationError struct {
-	Status  int
-	Message string
-	Err     error
-}
-
-func (e *AuthenticationError) Error() string {
-	msg := "authentication failed: " + e.Message
-	if e.Status > 0 {
-		msg = fmt.Sprintf("%s (status %d)", msg, e.Status)
-	}
-
-	if e.Err != nil {
-		msg = fmt.Sprintf("%s: %v", msg, e.Err)
-	}
-
-	return msg
-}
-
-// Is matches ErrAuthentication so callers can use errors.Is with the sentinel.
-func (*AuthenticationError) Is(target error) bool {
-	return target == ErrAuthentication
-}
-
-// Unwrap returns the underlying cause, if any.
-func (e *AuthenticationError) Unwrap() error {
-	return e.Err
-}
-
 // GatewayError represents a gateway operation failure.
 type GatewayError struct {
 	Op         string
@@ -73,13 +43,15 @@ func (e *GatewayError) Unwrap() error {
 	return e.Err
 }
 
-// NewAuthError creates a new AuthenticationError wrapping an optional cause.
+// NewAuthError creates a new GatewayError matching ErrAuthentication, wrapping an optional cause.
 func NewAuthError(status int, message string, err error) error {
-	return &AuthenticationError{
-		Status:  status,
-		Message: message,
-		Err:     err,
+	if err == nil {
+		err = ErrAuthentication
+	} else {
+		err = fmt.Errorf("%w: %w", ErrAuthentication, err)
 	}
+
+	return NewGatewayError("authentication", status, message, err)
 }
 
 // NewGatewayError creates a new GatewayError.

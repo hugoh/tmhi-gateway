@@ -9,45 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAuthenticationError(t *testing.T) {
-	t.Run("error message with status", func(t *testing.T) {
-		err := &AuthenticationError{
-			Status:  http.StatusUnauthorized,
-			Message: "invalid credentials",
-		}
-		assert.Contains(t, err.Error(), "authentication failed")
-		assert.Contains(t, err.Error(), "401")
-		assert.Contains(t, err.Error(), "invalid credentials")
-	})
-
-	t.Run("error message without status", func(t *testing.T) {
-		err := &AuthenticationError{
-			Message: "connection refused",
-		}
-		assert.Contains(t, err.Error(), "authentication failed")
-		assert.Contains(t, err.Error(), "connection refused")
-	})
-
-	t.Run("Is matches sentinel error", func(t *testing.T) {
-		err := &AuthenticationError{
-			Message: "failed",
-		}
-		assert.ErrorIs(t, err, ErrAuthentication)
-	})
-
-	t.Run("Unwrap returns cause", func(t *testing.T) {
-		cause := errors.New("connection refused")
-		err := &AuthenticationError{
-			Message: "failed",
-			Err:     cause,
-		}
-		assert.Equal(t, cause, errors.Unwrap(err))
-		require.ErrorIs(t, err, cause)
-		require.ErrorIs(t, err, ErrAuthentication)
-		assert.Contains(t, err.Error(), "connection refused")
-	})
-}
-
 func TestGatewayError(t *testing.T) {
 	t.Run("error message with all fields", func(t *testing.T) {
 		err := &GatewayError{
@@ -96,11 +57,19 @@ func TestNewAuthError(t *testing.T) {
 	err := NewAuthError(http.StatusUnauthorized, "invalid token", cause)
 	require.Error(t, err)
 
-	authErr, ok := errors.AsType[*AuthenticationError](err)
+	gwErr, ok := errors.AsType[*GatewayError](err)
 	require.True(t, ok)
-	assert.Equal(t, http.StatusUnauthorized, authErr.Status)
-	assert.Equal(t, "invalid token", authErr.Message)
-	assert.Equal(t, cause, authErr.Err)
+	assert.Equal(t, "authentication", gwErr.Op)
+	assert.Equal(t, http.StatusUnauthorized, gwErr.HTTPStatus)
+	assert.Equal(t, "invalid token", gwErr.Message)
+	require.ErrorIs(t, err, ErrAuthentication)
+	require.ErrorIs(t, err, cause)
+}
+
+func TestNewAuthError_NoCause(t *testing.T) {
+	err := NewAuthError(0, "login response missing auth token", nil)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrAuthentication)
 }
 
 func TestNewGatewayError(t *testing.T) {

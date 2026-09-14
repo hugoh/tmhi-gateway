@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"resty.dev/v3"
 )
 
 const (
@@ -65,44 +67,24 @@ func (n *NokiaGateway) Login(ctx context.Context) error {
 
 	n.credentials.SID = loginResp.Sid
 	n.credentials.csrfToken = loginResp.CsrfToken
-	//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
-	n.client.SetCookie(&http.Cookie{Name: sidCookieName, Value: n.credentials.SID})
 
 	return nil
 }
 
 // Reboot restarts the Nokia gateway.
 func (n *NokiaGateway) Reboot(ctx context.Context) error {
-	if err := n.Login(ctx); err != nil {
-		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
-	}
-
-	formData := map[string]string{
-		"csrf_token": n.credentials.csrfToken,
-	}
-
-	if n.config.DryRun {
-		return nil
-	}
-
-	resp, err := n.client.R().SetContext(ctx).SetFormData(formData).Post("/reboot_web_app.cgi")
-	if err != nil {
-		return fmt.Errorf("error sending reboot request: %w", err)
-	}
-
-	if resp.IsError() {
-		status := resp.StatusCode()
-		if status == http.StatusUnauthorized || status == http.StatusForbidden {
-			n.logout()
+	return n.performReboot(ctx, n, n.Login, func() (*resty.Response, error) {
+		formData := map[string]string{
+			"csrf_token": n.credentials.csrfToken,
 		}
 
-		return NewGatewayError("reboot", status, resp.String(), ErrRebootFailed)
-	}
-
-	// A successful reboot invalidates the session on the gateway side.
-	n.logout()
-
-	return nil
+		//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
+		return n.client.R().
+			SetContext(ctx).
+			SetCookie(&http.Cookie{Name: sidCookieName, Value: n.credentials.SID}).
+			SetFormData(formData).
+			Post("/reboot_web_app.cgi")
+	})
 }
 
 // Request is not implemented for Nokia gateway.
@@ -131,9 +113,6 @@ func (n *NokiaGateway) isLoggedIn() bool {
 
 func (n *NokiaGateway) logout() {
 	n.credentials = nokiaLoginData{}
-	// resty.Client.SetCookie/SetCookies both append; assign directly to
-	// replace the slice so re-login doesn't accumulate stale sid cookies.
-	n.client.Cookies = nil
 }
 
 func (n *NokiaGateway) getCredentials(
@@ -166,7 +145,7 @@ func (n *NokiaGateway) getCredentials(
 		return nil, NewAuthError(0, "login request failed", err)
 	}
 
-	if resp.IsError() {
+	if resp.IsStatusFailure() {
 		return nil, NewAuthError(resp.StatusCode(), resp.String(), nil)
 	}
 
@@ -191,7 +170,7 @@ func (n *NokiaGateway) getNonce(ctx context.Context) (*nokiaNonce, error) {
 		return nil, fmt.Errorf("error getting nonce: %w", err)
 	}
 
-	if resp.IsError() {
+	if resp.IsStatusFailure() {
 		return nil, NewGatewayError("nonce", resp.StatusCode(), resp.String(), ErrAuthentication)
 	}
 

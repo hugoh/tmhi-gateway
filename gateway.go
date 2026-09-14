@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 
-	"github.com/go-resty/resty/v2"
+	"resty.dev/v3"
 )
 
 // Gateway defines the interface for T-Mobile gateway implementations.
@@ -14,6 +15,7 @@ import (
 // Implementations are not safe for concurrent use: Login mutates shared
 // client state such as auth headers and cookies.
 type Gateway interface {
+	Close() error
 	Login(ctx context.Context) error
 	Reboot(ctx context.Context) error
 	Request(ctx context.Context, method, path string) (*InfoResult, error)
@@ -32,6 +34,10 @@ type GatewayCommon struct {
 
 // NewGatewayCommon creates a new GatewayCommon with the given configuration.
 func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
+	if cfg == nil {
+		panic("tmhi: GatewayConfig must not be nil")
+	}
+
 	host := cfg.Host
 	// Bare IPv6 literals must be bracketed in URLs.
 	// Use ContainsRune(':') rather than To4()==nil so IPv4-mapped IPv6
@@ -54,6 +60,7 @@ func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
 
 	if cfg.Retries > 0 {
 		client.SetRetryCount(cfg.Retries)
+		client.SetRetryAllowNonIdempotent(true)
 	}
 
 	if cfg.Debug {
@@ -64,6 +71,15 @@ func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
 		client: client,
 		config: cfg,
 	}
+}
+
+// Close releases resources held by the underlying HTTP client.
+func (gc *GatewayCommon) Close() error {
+	if err := gc.client.Close(); err != nil {
+		return fmt.Errorf("close client: %w", err)
+	}
+
+	return nil
 }
 
 // CheckWebInterface checks if the gateway web interface is accessible.
@@ -79,7 +95,51 @@ func (gc *GatewayCommon) CheckWebInterface(ctx context.Context) *StatusResult {
 	}
 
 	result.StatusCode = resp.StatusCode()
-	result.WebInterfaceUp = resp.IsSuccess()
+	result.WebInterfaceUp = resp.IsStatusSuccess()
 
 	return result
+}
+
+// authSession is implemented by gateway credential holders that must be
+// invalidated when the gateway rejects a request as unauthenticated.
+type authSession interface {
+	logout()
+}
+
+// performReboot runs the shared reboot flow used by every gateway
+// implementation: skip entirely in dry-run mode, otherwise authenticate,
+// issue the vendor-supplied reboot request, and invalidate the session on
+// success or on an auth rejection.
+func (gc *GatewayCommon) performReboot(
+	ctx context.Context,
+	sess authSession,
+	login func(context.Context) error,
+	doRequest func() (*resty.Response, error),
+) error {
+	if gc.config.DryRun {
+		return nil
+	}
+
+	if err := login(ctx); err != nil {
+		return fmt.Errorf("cannot reboot without successful login flow: %w", err)
+	}
+
+	resp, err := doRequest()
+	if err != nil {
+		return fmt.Errorf("reboot request failed: %w", err)
+	}
+
+	if resp.IsStatusFailure() {
+		status := resp.StatusCode()
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			sess.logout()
+		}
+
+		return NewGatewayError("reboot", status, resp.String(), ErrRebootFailed)
+	}
+
+	// A successful reboot invalidates the session on the gateway side.
+	sess.logout()
+
+	return nil
 }

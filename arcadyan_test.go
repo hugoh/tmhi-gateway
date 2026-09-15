@@ -282,8 +282,7 @@ func TestArcadyanGateway_Status_Success(t *testing.T) {
 
 	gw := newArcadyanWithToken(t, ts)
 
-	result, err := gw.Status(t.Context())
-	require.NoError(t, err)
+	result := gw.Status(t.Context())
 	assert.True(t, result.WebInterfaceUp)
 	assert.Equal(t, "registered", result.Registration)
 }
@@ -301,8 +300,7 @@ func TestArcadyanGateway_Status_Error(t *testing.T) {
 
 	gw := newArcadyanWithToken(t, ts)
 
-	result, err := gw.Status(t.Context())
-	require.NoError(t, err)
+	result := gw.Status(t.Context())
 	assert.True(t, result.WebInterfaceUp)
 	require.Error(t, result.Error)
 	require.ErrorIs(t, result.Error, ErrStatusFailed)
@@ -335,8 +333,7 @@ func TestArcadyanGateway_Status_NetworkError(t *testing.T) {
 
 	gw := newArcadyanWithToken(t, ts)
 
-	result, err := gw.Status(t.Context())
-	require.NoError(t, err)
+	result := gw.Status(t.Context())
 	assert.True(t, result.WebInterfaceUp)
 	require.Error(t, result.Error)
 	assert.Contains(t, result.Error.Error(), "failed to get registration status")

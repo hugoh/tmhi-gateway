@@ -1,6 +1,7 @@
 package tmhi
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net"
@@ -20,7 +21,7 @@ type Gateway interface {
 	Reboot(ctx context.Context) error
 	Request(ctx context.Context, method, path string) (*InfoResult, error)
 	Info(ctx context.Context) (*InfoResult, error)
-	Status(ctx context.Context) (*StatusResult, error)
+	Status(ctx context.Context) *StatusResult
 	Signal(ctx context.Context) (*SignalResult, error)
 }
 
@@ -51,12 +52,7 @@ func NewGatewayCommon(cfg *GatewayConfig) *GatewayCommon {
 	client.SetBaseURL("http://" + host)
 	client.SetTimeout(cfg.Timeout)
 
-	ua := cfg.UserAgent
-	if ua == "" {
-		ua = defaultUserAgent
-	}
-
-	client.SetHeader("User-Agent", ua)
+	client.SetHeader("User-Agent", cmp.Or(cfg.UserAgent, defaultUserAgent))
 
 	if cfg.Retries > 0 {
 		client.SetRetryCount(cfg.Retries)

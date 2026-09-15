@@ -98,8 +98,8 @@ func (*NokiaGateway) Info(_ context.Context) (*InfoResult, error) {
 }
 
 // Status checks the gateway connection status.
-func (n *NokiaGateway) Status(ctx context.Context) (*StatusResult, error) {
-	return n.CheckWebInterface(ctx), nil
+func (n *NokiaGateway) Status(ctx context.Context) *StatusResult {
+	return n.CheckWebInterface(ctx)
 }
 
 // Signal is not implemented for Nokia gateway.

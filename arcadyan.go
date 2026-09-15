@@ -127,7 +127,7 @@ func (a *ArcadyanGateway) Request(ctx context.Context, method, path string) (*In
 }
 
 // Status checks the gateway connection status.
-func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
+func (a *ArcadyanGateway) Status(ctx context.Context) *StatusResult {
 	webResult := a.CheckWebInterface(ctx)
 
 	var result struct {
@@ -160,7 +160,7 @@ func (a *ArcadyanGateway) Status(ctx context.Context) (*StatusResult, error) {
 		webResult.Registration = result.Signal.Generic.Registration
 	}
 
-	return webResult, nil
+	return webResult
 }
 
 // Signal retrieves signal strength information.

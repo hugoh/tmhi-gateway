@@ -123,8 +123,7 @@ func TestNokiaGateway_Status(t *testing.T) {
 
 	gw := nokiaTestGw(ts, &GatewayConfig{}, "", "")
 
-	result, err := gw.Status(t.Context())
-	require.NoError(t, err)
+	result := gw.Status(t.Context())
 	assert.True(t, result.WebInterfaceUp)
 	assert.Equal(t, http.StatusOK, result.StatusCode)
 }

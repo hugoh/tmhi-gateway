@@ -2,23 +2,24 @@ package tmhi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
-
-	"resty.dev/v3"
 )
 
 const (
-	nonceParam     = "nonce"
-	sidCookieName  = "sid"
-	loginWebAppCGI = "/login_web_app.cgi"
+	nonceParam         = "nonce"
+	sidCookieName      = "sid"
+	loginWebAppCGI     = "/login_web_app.cgi"
+	formURLContentType = "application/x-www-form-urlencoded"
 )
 
 type nokiaNonce struct {
-	Nonce     string
-	Pubkey    string
-	RandomKey string
+	Nonce     string `json:"nonce"`
+	Pubkey    string `json:"pubkey"`
+	RandomKey string `json:"randomKey"`
 }
 
 type nokiaLoginData struct {
@@ -27,9 +28,9 @@ type nokiaLoginData struct {
 }
 
 type nokiaLoginResp struct {
-	Success   int
-	Reason    int
-	Sid       string
+	Success   int    `json:"success"`
+	Reason    int    `json:"reason"`
+	Sid       string `json:"sid"`
 	CsrfToken string `json:"token"`
 }
 
@@ -73,17 +74,16 @@ func (n *NokiaGateway) Login(ctx context.Context) error {
 
 // Reboot restarts the Nokia gateway.
 func (n *NokiaGateway) Reboot(ctx context.Context) error {
-	return n.performReboot(ctx, n, n.Login, func() (*resty.Response, error) {
-		formData := map[string]string{
-			"csrf_token": n.credentials.csrfToken,
-		}
+	return n.performReboot(ctx, n, n.Login, func() (*gwResponse, error) {
+		form := url.Values{"csrf_token": {n.credentials.csrfToken}}
 
 		//nolint:gosec // Secure/HttpOnly/SameSite only apply to response cookies, not outgoing requests.
-		return n.client.R().
-			SetContext(ctx).
-			SetCookie(&http.Cookie{Name: sidCookieName, Value: n.credentials.SID}).
-			SetFormData(formData).
-			Post("/reboot_web_app.cgi")
+		cookie := &http.Cookie{Name: sidCookieName, Value: n.credentials.SID}
+
+		return n.doRequest(
+			ctx, http.MethodPost, "/reboot_web_app.cgi",
+			[]byte(form.Encode()), formURLContentType, cookie,
+		)
 	})
 }
 
@@ -132,21 +132,29 @@ func (n *NokiaGateway) getCredentials(
 		"enciv":         random16bytes(),
 	}
 
-	reqURL := loginWebAppCGI
+	form := url.Values{}
+	for k, v := range reqParams {
+		form.Set(k, v)
+	}
 
-	var loginResp nokiaLoginResp
-
-	resp, err := n.client.R().
-		SetContext(ctx).
-		SetResult(&loginResp).
-		SetFormData(reqParams).
-		Post(reqURL)
+	resp, err := n.doRequest(
+		ctx,
+		http.MethodPost,
+		loginWebAppCGI,
+		[]byte(form.Encode()),
+		formURLContentType,
+	)
 	if err != nil {
 		return nil, NewAuthError(0, "login request failed", err)
 	}
 
 	if resp.IsStatusFailure() {
 		return nil, NewAuthError(resp.StatusCode(), resp.String(), nil)
+	}
+
+	var loginResp nokiaLoginResp
+	if err := json.Unmarshal(resp.Bytes(), &loginResp); err != nil {
+		return nil, NewAuthError(0, "login request failed", err)
 	}
 
 	if !loginResp.hasCredentials() {
@@ -160,18 +168,18 @@ func (n *NokiaGateway) getCredentials(
 }
 
 func (n *NokiaGateway) getNonce(ctx context.Context) (*nokiaNonce, error) {
-	var result nokiaNonce
-
-	resp, err := n.client.R().
-		SetContext(ctx).
-		SetResult(&result).
-		Get(loginWebAppCGI + "?" + nonceParam)
+	resp, err := n.doRequest(ctx, http.MethodGet, loginWebAppCGI+"?"+nonceParam, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("error getting nonce: %w", err)
 	}
 
 	if resp.IsStatusFailure() {
 		return nil, NewGatewayError("nonce", resp.StatusCode(), resp.String(), ErrAuthentication)
+	}
+
+	var result nokiaNonce
+	if err := json.Unmarshal(resp.Bytes(), &result); err != nil {
+		return nil, fmt.Errorf("error getting nonce: %w", err)
 	}
 
 	return &result, nil

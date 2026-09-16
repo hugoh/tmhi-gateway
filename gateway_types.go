@@ -8,43 +8,43 @@ import (
 
 // SignalData contains signal metrics.
 type SignalData struct {
-	Bands []string
-	Bars  float64
-	CID   int
-	RSRP  int
-	RSRQ  int
-	RSSI  int
-	SINR  int
+	Bands []string `json:"bands"`
+	Bars  float64  `json:"bars"`
+	CID   int      `json:"cid"`
+	RSRP  int      `json:"rsrp"`
+	RSRQ  int      `json:"rsrq"`
+	RSSI  int      `json:"rssi"`
+	SINR  int      `json:"sinr"`
 }
 
 // FourGSignal contains 4G signal information.
 type FourGSignal struct {
 	SignalData
 
-	ENBID int
+	ENBID int `json:"eNBID"` //nolint:tagliatelle // matches the gateway API's actual field name
 }
 
 // FiveGSignal contains 5G signal information.
 type FiveGSignal struct {
 	SignalData
 
-	AntennaUsed string
-	GNBID       int
+	AntennaUsed string `json:"antennaUsed"`
+	GNBID       int    `json:"gNBID"` //nolint:tagliatelle // matches the gateway API's actual field name
 }
 
 // GenericSignalInfo contains generic signal information.
 type GenericSignalInfo struct {
-	APN          string
-	HasIPv6      bool
-	Registration string
-	Roaming      bool
+	APN          string `json:"apn"`
+	HasIPv6      bool   `json:"hasIPv6"`
+	Registration string `json:"registration"`
+	Roaming      bool   `json:"roaming"`
 }
 
 // SignalResult contains complete signal information.
 type SignalResult struct {
-	FourG   *FourGSignal `json:"4g"`
-	FiveG   *FiveGSignal `json:"5g"`
-	Generic GenericSignalInfo
+	FourG   *FourGSignal      `json:"4g"`
+	FiveG   *FiveGSignal      `json:"5g"`
+	Generic GenericSignalInfo `json:"generic"`
 }
 
 // StatusResult contains status check result.

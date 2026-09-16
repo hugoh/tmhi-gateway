@@ -266,18 +266,27 @@ func TestNokiaGateway_Reboot_LoginFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "cannot reboot without successful login")
 }
 
-func TestNokiaGateway_Login_NonceSuccessCredentialsError(t *testing.T) {
-	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+// nokiaLoginServer serves the nonce request, then responds to the login
+// request with loginRespBody.
+func nokiaLoginServer(t *testing.T, loginRespBody string) *httptest.Server {
+	t.Helper()
+
+	return newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
 		if r.Method == http.MethodGet && r.URL.RawQuery == "nonce" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(testNonceBody))
-		} else {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"success":0,"reason":600}`))
+
+			return
 		}
+
+		_, _ = w.Write([]byte(loginRespBody))
 	})
+}
+
+func TestNokiaGateway_Login_NonceSuccessCredentialsError(t *testing.T) {
+	ts := nokiaLoginServer(t, `{"success":0,"reason":600}`)
 
 	gw := nokiaTestGw(ts, testConfig(ts), "", "")
 
@@ -287,17 +296,7 @@ func TestNokiaGateway_Login_NonceSuccessCredentialsError(t *testing.T) {
 }
 
 func TestNokiaGateway_Login_Success(t *testing.T) {
-	ts := newTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.RawQuery == "nonce" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(testNonceBody))
-		} else if r.Method == http.MethodPost && r.URL.Path == loginWebAppCGI {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(testLoginRespBody))
-		}
-	})
+	ts := nokiaLoginServer(t, testLoginRespBody)
 
 	gw := nokiaTestGw(ts, testConfig(ts), "", "")
 

@@ -9,11 +9,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"resty.dev/v3"
 )
 
 func newArcadyan(gc *GatewayCommon, token string, exp time.Time) *ArcadyanGateway {
-	gc.client.SetHeader("Accept", "application/json")
+	gc.SetHeader("Accept", "application/json")
 
 	ag := &ArcadyanGateway{
 		GatewayCommon: gc,
@@ -93,8 +92,10 @@ func TestArcadyanGateway_Reboot_Failure(t *testing.T) {
 func TestArcadyanGateway_Reboot_DryRun(t *testing.T) {
 	cfg := &GatewayConfig{Username: testUsername, Password: testPassword, DryRun: true}
 	gc := &GatewayCommon{
-		client: resty.NewWithClient(&http.Client{}).SetBaseURL("http://" + cfg.Host),
-		config: cfg,
+		client:  &http.Client{},
+		baseURL: "http://" + cfg.Host,
+		header:  make(http.Header),
+		config:  cfg,
 	}
 	gw := newArcadyan(gc, "valid-token", time.Now().Add(1*time.Hour))
 
@@ -376,50 +377,69 @@ func TestArcadyanGateway_Request_ErrorStatus(t *testing.T) {
 }
 
 func TestArcadyanGateway_Request_Methods(t *testing.T) {
-	t.Run("GET request", func(t *testing.T) {
-		ts := newTestServer(t, jsonResponder(http.StatusOK, `{"status": "ok"}`))
+	cases := []struct {
+		name     string
+		method   string
+		handler  http.HandlerFunc
+		useCreds bool
+		check    func(t *testing.T, result *InfoResult)
+	}{
+		{
+			name:    "GET request",
+			method:  http.MethodGet,
+			handler: jsonResponder(http.StatusOK, `{"status": "ok"}`),
+			check: func(t *testing.T, result *InfoResult) {
+				t.Helper()
+				assert.NotNil(t, result)
+				assert.Equal(t, http.StatusOK, result.StatusCode)
+			},
+		},
+		{
+			name:     "POST request",
+			method:   http.MethodPost,
+			handler:  jsonResponder(http.StatusOK, `{"status": "created"}`),
+			useCreds: true,
+			check: func(t *testing.T, result *InfoResult) {
+				t.Helper()
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name:    "non-JSON response",
+			method:  http.MethodGet,
+			handler: textResponder(http.StatusOK, "plain text response"),
+			check: func(t *testing.T, result *InfoResult) {
+				t.Helper()
+				assert.Equal(t, "text/plain", result.ContentType)
+			},
+		},
+		{
+			name:    "empty response",
+			method:  http.MethodGet,
+			handler: textResponder(http.StatusNoContent, ""),
+			check: func(t *testing.T, result *InfoResult) {
+				t.Helper()
+				assert.Equal(t, http.StatusNoContent, result.StatusCode)
+			},
+		},
+	}
 
-		gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
-		gw.config = testConfigNoCreds(ts)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := newTestServer(t, tc.handler)
 
-		result, err := gw.Request(t.Context(), "GET", "/test")
-		require.NoError(t, err)
-		assert.NotNil(t, result)
-		assert.Equal(t, http.StatusOK, result.StatusCode)
-	})
+			gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
+			if tc.useCreds {
+				gw.config = testConfig(ts)
+			} else {
+				gw.config = testConfigNoCreds(ts)
+			}
 
-	t.Run("POST request", func(t *testing.T) {
-		ts := newTestServer(t, jsonResponder(http.StatusOK, `{"status": "created"}`))
-
-		gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
-		gw.config = testConfig(ts)
-
-		result, err := gw.Request(t.Context(), "POST", "/test")
-		require.NoError(t, err)
-		assert.NotNil(t, result)
-	})
-
-	t.Run("non-JSON response", func(t *testing.T) {
-		ts := newTestServer(t, textResponder(http.StatusOK, "plain text response"))
-
-		gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
-		gw.config = testConfigNoCreds(ts)
-
-		result, err := gw.Request(t.Context(), "GET", "/test")
-		require.NoError(t, err)
-		assert.Equal(t, "text/plain", result.ContentType)
-	})
-
-	t.Run("empty response", func(t *testing.T) {
-		ts := newTestServer(t, textResponder(http.StatusNoContent, ""))
-
-		gw := newArcadyan(testCommon(ts), "valid-token", time.Now().Add(1*time.Hour))
-		gw.config = testConfigNoCreds(ts)
-
-		result, err := gw.Request(t.Context(), "GET", "/test")
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusNoContent, result.StatusCode)
-	})
+			result, err := gw.Request(t.Context(), tc.method, "/test")
+			require.NoError(t, err)
+			tc.check(t, result)
+		})
+	}
 }
 
 func TestArcadyanGateway_Signal(t *testing.T) {

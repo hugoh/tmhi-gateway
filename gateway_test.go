@@ -1,6 +1,7 @@
 package tmhi
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -8,7 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"resty.dev/v3"
+	"github.com/stretchr/testify/require"
 )
 
 const testServerErrMsg = "server error"
@@ -31,8 +32,10 @@ func newTestServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 
 func testCommon(ts *httptest.Server) *GatewayCommon {
 	return &GatewayCommon{
-		client: resty.NewWithClient(&http.Client{}).SetBaseURL(ts.URL),
-		config: &GatewayConfig{},
+		client:  &http.Client{},
+		baseURL: ts.URL,
+		header:  make(http.Header),
+		config:  &GatewayConfig{},
 	}
 }
 
@@ -46,8 +49,10 @@ func newClosedServerCommon(t *testing.T) *GatewayCommon {
 	ts.Close()
 
 	return &GatewayCommon{
-		client: resty.NewWithClient(&http.Client{}).SetBaseURL(baseURL),
-		config: &GatewayConfig{},
+		client:  &http.Client{},
+		baseURL: baseURL,
+		header:  make(http.Header),
+		config:  &GatewayConfig{},
 	}
 }
 
@@ -55,9 +60,9 @@ func TestGatewayCommon_Close(t *testing.T) {
 	ts := newTestServer(t, func(_ http.ResponseWriter, _ *http.Request) {})
 	gc := testCommon(ts)
 
-	assert.NoError(t, gc.Close())
+	gc.Close()
 	// Close is safe to call more than once.
-	assert.NoError(t, gc.Close())
+	gc.Close()
 }
 
 func TestNewGatewayCommon(t *testing.T) {
@@ -88,7 +93,7 @@ func TestNewGatewayCommon_UserAgent(t *testing.T) {
 
 	t.Run("default", func(t *testing.T) {
 		gc := NewGatewayCommon(&GatewayConfig{Host: strings.TrimPrefix(ts.URL, "http://")})
-		_, _ = gc.client.R().Get("/")
+		_, _ = gc.doRequest(t.Context(), http.MethodGet, "/", nil, "")
 
 		assert.Equal(t, defaultUserAgent, gotUA)
 	})
@@ -100,10 +105,54 @@ func TestNewGatewayCommon_UserAgent(t *testing.T) {
 			Host:      strings.TrimPrefix(ts.URL, "http://"),
 			UserAgent: custom,
 		})
-		_, _ = gc.client.R().Get("/")
+		_, _ = gc.doRequest(t.Context(), http.MethodGet, "/", nil, "")
 
 		assert.Equal(t, custom, gotUA)
 	})
+}
+
+func TestGatewayCommon_doRequest_NegativeRetries(t *testing.T) {
+	gc := newClosedServerCommon(t)
+	gc.retries = -1
+
+	resp, err := gc.doRequest(t.Context(), http.MethodGet, "/", nil, "")
+
+	require.Error(t, err)
+	assert.Nil(t, resp)
+}
+
+func TestGatewayCommon_doRequest_WaitsBetweenRetries(t *testing.T) {
+	const (
+		retries   = 2
+		retryWait = 20 * time.Millisecond
+	)
+
+	gc := newClosedServerCommon(t)
+	gc.retries = retries
+	gc.retryWait = retryWait
+
+	start := time.Now()
+	_, err := gc.doRequest(t.Context(), http.MethodGet, "/", nil, "")
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assert.GreaterOrEqual(t, elapsed, retries*retryWait)
+}
+
+func TestGatewayCommon_doRequest_WaitRespectsContextCancellation(t *testing.T) {
+	gc := newClosedServerCommon(t)
+	gc.retries = 5
+	gc.retryWait = time.Hour
+
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := gc.doRequest(ctx, http.MethodGet, "/", nil, "")
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	assert.Less(t, elapsed, time.Second)
 }
 
 func TestNewGatewayCommon_HostForms(t *testing.T) {
@@ -122,7 +171,7 @@ func TestNewGatewayCommon_HostForms(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.host, func(t *testing.T) {
 			gc := NewGatewayCommon(&GatewayConfig{Host: tc.host})
-			assert.Equal(t, tc.want, gc.client.BaseURL())
+			assert.Equal(t, tc.want, gc.baseURL)
 		})
 	}
 }
@@ -170,8 +219,10 @@ func TestCheckWebInterface(t *testing.T) {
 				ts.Close()
 
 				gc := &GatewayCommon{
-					client: resty.NewWithClient(ts.Client()).SetBaseURL(ts.URL),
-					config: &GatewayConfig{},
+					client:  ts.Client(),
+					baseURL: ts.URL,
+					header:  make(http.Header),
+					config:  &GatewayConfig{},
 				}
 
 				result := gc.CheckWebInterface(t.Context())

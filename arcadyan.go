@@ -5,10 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
-
-	"resty.dev/v3"
 )
 
 // infoURL is the endpoint for gateway information.
@@ -36,7 +35,7 @@ const expirationMargin = 30 * time.Second
 // NewArcadyanGateway creates a new Arcadyan gateway instance.
 func NewArcadyanGateway(cfg *GatewayConfig) *ArcadyanGateway {
 	gc := NewGatewayCommon(cfg)
-	gc.client.SetHeader("Accept", "application/json")
+	gc.SetHeader("Accept", jsonContentType)
 
 	return &ArcadyanGateway{GatewayCommon: gc}
 }
@@ -52,24 +51,31 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 		"password": a.config.Password,
 	}
 
-	reqPath := "/TMI/v1/auth/login"
-
-	var loginResp struct {
-		Auth struct {
-			Expiration       int64
-			RefreshCountLeft int
-			RefreshCountMax  int
-			Token            string
-		}
+	reqBody, err := json.Marshal(bodyMap)
+	if err != nil {
+		return fmt.Errorf("login request failed: %w", err)
 	}
 
-	resp, err := a.client.R().SetContext(ctx).SetResult(&loginResp).SetBody(bodyMap).Post(reqPath)
+	resp, err := a.doRequest(ctx, http.MethodPost, "/TMI/v1/auth/login", reqBody, jsonContentType)
 	if err != nil {
 		return fmt.Errorf("login request failed: %w", err)
 	}
 
 	if resp.IsStatusFailure() {
 		return NewAuthError(resp.StatusCode(), resp.String(), nil)
+	}
+
+	var loginResp struct {
+		Auth struct {
+			Expiration       int64  `json:"expiration"`
+			RefreshCountLeft int    `json:"refreshCountLeft"`
+			RefreshCountMax  int    `json:"refreshCountMax"`
+			Token            string `json:"token"`
+		} `json:"auth"`
+	}
+
+	if err := json.Unmarshal(resp.Bytes(), &loginResp); err != nil {
+		return fmt.Errorf("login request failed: %w", err)
 	}
 
 	if loginResp.Auth.Token == "" {
@@ -80,15 +86,15 @@ func (a *ArcadyanGateway) Login(ctx context.Context) error {
 		Expiration: loginResp.Auth.Expiration,
 		Token:      loginResp.Auth.Token,
 	}
-	a.client.SetAuthToken(a.credentials.Token)
+	a.SetAuthToken(a.credentials.Token)
 
 	return nil
 }
 
 // Reboot restarts the Arcadyan gateway.
 func (a *ArcadyanGateway) Reboot(ctx context.Context) error {
-	return a.performReboot(ctx, a, a.Login, func() (*resty.Response, error) {
-		return a.client.R().SetContext(ctx).Post("/TMI/v1/gateway/reset?set=reboot")
+	return a.performReboot(ctx, a, a.Login, func() (*gwResponse, error) {
+		return a.doRequest(ctx, http.MethodPost, "/TMI/v1/gateway/reset?set=reboot", nil, "")
 	})
 }
 
@@ -99,7 +105,7 @@ func (a *ArcadyanGateway) Info(ctx context.Context) (*InfoResult, error) {
 
 // Request makes an HTTP request to the gateway.
 func (a *ArcadyanGateway) Request(ctx context.Context, method, path string) (*InfoResult, error) {
-	resp, err := a.client.R().SetContext(ctx).Execute(method, path)
+	resp, err := a.doRequest(ctx, method, path, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -133,14 +139,14 @@ func (a *ArcadyanGateway) Status(ctx context.Context) *StatusResult {
 	var result struct {
 		Signal struct {
 			Generic struct { // NOSONAR
-				Registration string
-			}
-		}
+				Registration string `json:"registration"`
+			} `json:"generic"`
+		} `json:"signal"`
 	}
 
 	webResult.Registration = "unknown"
 
-	resp, err := a.client.R().SetContext(ctx).SetResult(&result).Get(infoURL)
+	resp, err := a.doRequest(ctx, http.MethodGet, infoURL, nil, "")
 
 	switch {
 	case err != nil:
@@ -157,7 +163,18 @@ func (a *ArcadyanGateway) Status(ctx context.Context) *StatusResult {
 			)
 		}
 	default:
-		webResult.Registration = result.Signal.Generic.Registration
+		if err := json.Unmarshal(resp.Bytes(), &result); err != nil {
+			if webResult.Error == nil {
+				webResult.Error = NewGatewayError(
+					"status",
+					resp.StatusCode(),
+					"failed to get registration status",
+					err,
+				)
+			}
+		} else {
+			webResult.Registration = result.Signal.Generic.Registration
+		}
 	}
 
 	return webResult
@@ -165,11 +182,7 @@ func (a *ArcadyanGateway) Status(ctx context.Context) *StatusResult {
 
 // Signal retrieves signal strength information.
 func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
-	var result struct {
-		Signal SignalResult
-	}
-
-	resp, err := a.client.R().SetContext(ctx).SetResult(&result).Get(infoURL)
+	resp, err := a.doRequest(ctx, http.MethodGet, infoURL, nil, "")
 	if err != nil {
 		return nil, NewGatewayError("signal", 0, "failed to get signal info", err)
 	}
@@ -183,12 +196,20 @@ func (a *ArcadyanGateway) Signal(ctx context.Context) (*SignalResult, error) {
 		)
 	}
 
+	var result struct {
+		Signal SignalResult `json:"signal"`
+	}
+
+	if err := json.Unmarshal(resp.Bytes(), &result); err != nil {
+		return nil, NewGatewayError("signal", resp.StatusCode(), "failed to get signal info", err)
+	}
+
 	return &result.Signal, nil
 }
 
 func (a *ArcadyanGateway) logout() {
 	a.credentials = arcadianLoginData{}
-	a.client.SetAuthToken("")
+	a.SetAuthToken("")
 }
 
 func (a *ArcadyanGateway) isLoggedIn() bool {

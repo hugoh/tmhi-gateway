@@ -2,7 +2,7 @@ package tmhi
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"strings"
 )
 
@@ -72,10 +72,10 @@ func (r *InfoResult) String() string {
 		return string(r.Raw)
 	}
 
-	var prettyJSON bytes.Buffer
-	if err := json.Indent(&prettyJSON, r.Raw, "", " "); err != nil {
+	pretty := jsontext.Value(bytes.Clone(r.Raw))
+	if err := pretty.Indent(jsontext.WithIndent(" ")); err != nil {
 		return string(r.Raw)
 	}
 
-	return prettyJSON.String()
+	return string(pretty)
 }
